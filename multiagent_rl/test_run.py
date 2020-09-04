@@ -84,13 +84,7 @@ runs_per_method = 2
 seed += 1
 print(f"ddpg {env_str}")
 logger_kwargs, output_msg = logging_info(env_str, subdir="temp")
-my_ddgp(
-    lambda: gym.make(env_str),
-    seed=seed,
-    epochs=epochs,
-    steps_per_epoch=steps_per_epoch,
-    logger_kwargs=logger_kwargs,
-)
+ddgp(lambda: gym.make(env_str), seed=seed, epochs=epochs, steps_per_epoch=steps_per_epoch, logger_kwargs=logger_kwargs)
 print(f"ddpg {env_str}")
 
 seed += 1

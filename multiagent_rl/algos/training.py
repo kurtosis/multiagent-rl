@@ -16,6 +16,7 @@ import torch
 from torch.optim import Adam
 
 from multiagent_rl.algos.agents import *
+from multiagent_rl.algos.buffers import *
 from multiagent_rl.utils.logx import EpochLogger
 
 
@@ -35,7 +36,7 @@ def count_vars(module):
 #     return net_target
 
 
-def my_vpg(
+def vpg(
     env_fn,
     actor_critic,
     seed=0,
@@ -237,7 +238,7 @@ def my_vpg(
     # print(f'total time: {end_time - start_time}')
 
 
-def my_ppo(
+def ppo(
     env_fn,
     actor_critic=GaussianActorCritic,
     seed=0,
@@ -441,7 +442,7 @@ def my_ppo(
     # print(f'total time: {end_time - start_time}')
 
 
-def my_ddgp(
+def ddgp(
     env_fn,
     agent_fn=DDPGAgent,
     seed=0,
@@ -651,7 +652,7 @@ def my_ddgp(
         # print(f'target_time {target_time}')
 
 
-def my_td3(
+def td3(
     env_fn,
     agent_fn=TD3Agent,
     seed=0,
@@ -872,7 +873,7 @@ def my_td3(
         # print(f'n_updates {n_updates}')
 
 
-def my_sac(
+def sac(
     env_fn,
     agent_fn=SACAgent,
     seed=0,
@@ -1087,16 +1088,3 @@ def my_sac(
         logger.log_tabular("LossQ2", average_only=True)
         logger.log_tabular("Time", time.time() - start_time)
         logger.dump_tabular()
-
-
-if __name__ == "__main__":
-    my_vpg(
-        seed=0,
-        epochs=100,
-        steps_per_epoch=10,
-        log_interval=1,
-        render=False,
-        max_episode_len=500,
-        pi_lr=3e-4,
-        v_lr=1e-3,
-    )

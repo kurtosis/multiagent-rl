@@ -368,3 +368,12 @@ class EpochLogger(Logger):
             else v
         )
         return mpi_statistics_scalar(vals)
+
+
+class EpisodeLogger(Logger):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.epoch_dict = dict()
+
+    def store(self, **kwargs):
+        pass
