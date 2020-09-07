@@ -1,3 +1,6 @@
+from copy import copy
+import numpy as np
+import pandas as pd
 from random import sample
 from scipy.stats import rankdata
 
@@ -311,6 +314,22 @@ class RoundRobinTournament(gym.Env):
         reward = np.zeros(self.num_agents)
         done = False
         self.current_turn -= 1
+
+        # Per turn reward based on change to relative score
+        if self.per_turn_reward:
+            reward = np.zeros(self.num_agents)
+            for pair, output in zip(self.match_pairs, match_outputs):
+                _, r, _, _ = output
+                reward[pair] = r - np.sum(r) / self.num_agents
+                # raw score reward
+                # reward[pair] = r
+        # end of episode return
+        elif (self.current_turn == 0) and (self.current_round == 1):
+                reward = self._final_reward()
+
+        if (self.current_turn == 0) and (self.current_round == 1):
+            done = True
+
         # start next round
         if self.current_turn == 0:
             self.match_pairs = assign_match_pairs(self.num_agents)
@@ -320,17 +339,7 @@ class RoundRobinTournament(gym.Env):
             all_obs[:, : self.match_obs_dim] = np.concatenate(
                 [match.reset() for match in self.match_env_list]
             )
-            # end tournament
-            if self.current_round == 0:
-                reward = self._final_reward()
-                done = True
 
-        # Per turn reward based on change to relative score
-        if self.per_turn_reward:
-            reward = np.zeros(self.num_agents)
-            for pair, output in zip(self.match_pairs, match_outputs):
-                _, r, _, _ = output
-                reward[pair] = r - np.sum(r) / self.num_agents
 
         if self.hide_obs:
             # add a hack to keep own score as feature (for delayed reward)
@@ -382,3 +391,19 @@ class RoundRobinTournament(gym.Env):
 
     def render(self, mode="human"):
         pass
+
+    def get_state(self):
+        """
+        Return full state of environment for logging.
+        """
+
+        env_state = pd.DataFrame(
+            dict(
+                round=[self.current_round],
+                turn=[self.current_turn],
+                opponent=[copy(self.agent_opponent)],
+                scores=[copy(np.round(self.scores, 3))],
+            )
+        ).copy(deep=True)
+
+        return env_state

@@ -3,7 +3,7 @@ import time
 
 import gym
 
-from multiagent_rl.algos.training import *
+from multiagent_rl.algos.tournament_ddpg import *
 from multiagent_rl.algos.ultimatum_agents import *
 from multiagent_rl.environments.tournament_env import *
 
@@ -169,8 +169,8 @@ static_agent_kwargs = dict(
 # Test DDPG vs constant bots
 logger_kwargs, output_msg = logging_info("tournament", subdir="dual_ultimatum")
 env_kwargs = dict(
-    num_rounds=12,
-    round_length=1,
+    num_rounds=2,
+    round_length=3,
     noise_size=0,
     top_cutoff=1,
     bottom_cutoff=None,
@@ -184,14 +184,14 @@ env_kwargs = dict(
 )
 agent_kwargs_constantbot = dict(offer=0.5, threshold=0.3)
 agent_kwargs_staticdistribbot = dict(
-    mean_offer=0.3, std_offer=0.1, mean_threshold=0.5, std_threshold=0.1,
+    mean_offer=0.6, std_offer=0., mean_threshold=0.4, std_threshold=0.,
 )
 
 agent_kwargs_ddpg = dict(
     hidden_layers_mu=(1,),
     hidden_layers_q=(64, 64, 64),
     # hidden_layers_q=(64, 64, 64, 64),
-    noise_std=0.1,
+    noise_std=0.3,
     pi_lr=1e-3,
     q_lr=1e-3,
     # gamma=0,

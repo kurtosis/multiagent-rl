@@ -1,6 +1,6 @@
 """
 
-Copied from openai/spinningup
+Copied/extended from openai/spinningup
 https://github.com/openai/spinningup/blob/master/spinup/utils/logx.py
 
 Some simple logging functionality, inspired by rllab's logging.
@@ -12,6 +12,7 @@ import json
 import joblib
 import shutil
 import numpy as np
+import pandas as pd
 import torch
 import os.path as osp, time, atexit, os
 import warnings
@@ -371,9 +372,66 @@ class EpochLogger(Logger):
 
 
 class EpisodeLogger(Logger):
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        num_agents=None,
+        output_dir=None,
+        output_fname="episodes.csv",
+        float_format="%6.4f",
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
-        self.epoch_dict = dict()
+        assert num_agents is not None
+        self.num_agents = num_agents
+        self.episode_list = []
+        self.output_dir = output_dir or "/tmp/experiments/%i" % int(time.time())
+        self.output_file = osp.join(self.output_dir, output_fname)
+        self.float_format = float_format
+        self.header = True
 
-    def store(self, **kwargs):
-        pass
+    def store(self, state):
+        """
+        Save something into the epoch_logger's current state.
+
+        Provide an arbitrary number of keyword arguments with numerical
+        values.
+        """
+        self.episode_list.append(state)
+
+    def create_dataframe(self):
+        self.episode_df = pd.concat(self.episode_list)
+        self.episode_df[
+            [f"opponent_{i}" for i in range(self.num_agents)]
+        ] = pd.DataFrame(
+            self.episode_df["opponent"].tolist(), index=self.episode_df.index
+        )
+        self.episode_df[[f"score_{i}" for i in range(self.num_agents)]] = pd.DataFrame(
+            self.episode_df["scores"].tolist(), index=self.episode_df.index
+        )
+        self.episode_df[
+            [f"action_{i}_{j}" for i in range(self.num_agents) for j in range(2)]
+        ] = pd.DataFrame(
+            self.episode_df["action"].tolist(), index=self.episode_df.index
+        )
+        self.episode_df[[f"reward_{i}" for i in range(self.num_agents)]] = pd.DataFrame(
+            self.episode_df["reward"].tolist(), index=self.episode_df.index
+        )
+        self.episode_df.drop(
+            columns=["opponent", "scores", "action", "reward"], inplace=True
+        )
+
+    def dump_dataframe(self):
+        self.create_dataframe()
+        self.episode_df.to_csv(
+            self.output_file,
+            index=False,
+            header=self.header,
+            mode="a",
+            float_format=self.float_format,
+        )
+        self.header = False
+
+    def flush(self):
+        self.episode_list = []
+        self.episode_df = None

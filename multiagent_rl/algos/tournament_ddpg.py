@@ -15,7 +15,7 @@ from gym.spaces import Box, Discrete, Tuple
 from multiagent_rl.algos.agents import *
 from multiagent_rl.algos.buffers import *
 from multiagent_rl.environments.tournament_env import *
-from multiagent_rl.utils.logx import EpochLogger
+from multiagent_rl.utils.logx import EpochLogger, EpisodeLogger
 
 
 def eval_q_fn(agent, nn=101, filename="/Users/kurtsmith/q.csv"):
@@ -71,6 +71,9 @@ def tournament_ddpg(
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
 
+    episode_logger = EpisodeLogger(num_agents=num_agents, **logger_kwargs)
+    test_logger = EpochLogger(**logger_kwargs)
+
     torch.manual_seed(seed)
     np.random.seed(seed)
 
@@ -122,7 +125,7 @@ def tournament_ddpg(
     # logger.setup_pytorch_saver(agent_1)
 
     def deterministic_policy_test():
-        for _ in range(test_episodes):
+        for i_epi in range(test_episodes):
             all_obs = test_env.reset()
             episode_return = np.zeros(num_agents)
             episode_length = 0
@@ -155,9 +158,25 @@ def tournament_ddpg(
                         TestThresholdLastRound=actions[0, 1],
                     )
 
+                # TO DO - add epoch # / episode # - as separate dfs to cat?
+                # should I do two, one for env state and one for actions/rewards/done?
+
+                outer_df = pd.DataFrame(dict(epoch=[epoch], episode=[i_epi]))
+                outer_df = pd.concat((outer_df, test_env.get_state()), axis=1)
+
                 all_obs, reward, done, _ = test_env.step(actions)
+                # print(f'done {done}')
+
+                outer_df['action'] = [actions.flatten()]
+                outer_df['reward'] = [reward]
+                outer_df['done'] = [done]
+                episode_logger.store(outer_df)
+
                 episode_return += reward
                 episode_length += 1
+
+            episode_logger.dump_dataframe()
+            episode_logger.flush()
             logger.store(
                 TestEpRet0=episode_return[0],
                 TestEpRet1=episode_return[1],
@@ -173,6 +192,8 @@ def tournament_ddpg(
                 TestMaxScore=np.max(test_env.scores),
                 TestMinScore=np.min(test_env.scores),
             )
+        # episode_logger.dump_dataframe()
+        # episode_logger.flush()
 
     start_time = time.time()
 
@@ -275,7 +296,9 @@ def tournament_ddpg(
         if (epoch % save_freq == 0) or (epoch == epochs - 1):
             logger.save_state({"env": env}, None)
             if q_file is not None:
-                eval_q_fn(agent_list[0], filename=f"{logger.output_dir}/{q_file}_{epoch}.csv")
+                eval_q_fn(
+                    agent_list[0], filename=f"{logger.output_dir}/{q_file}_{epoch}.csv"
+                )
 
         # Log info about epoch
         logger.log_tabular("Epoch", epoch)

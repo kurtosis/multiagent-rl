@@ -193,3 +193,4 @@ class DualUltimatumTournament(gym.Env):
     def render(self, mode="human"):
         pass
 
+
