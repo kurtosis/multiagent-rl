@@ -130,6 +130,7 @@ def tournament_ddpg(
             episode_return = np.zeros(num_agents)
             episode_length = 0
             done = False
+            log_episode = (epoch % save_freq == 0) or (epoch == epochs - 1)
             while not done and not episode_length == max_episode_len:
                 with torch.no_grad():
                     actions = [
@@ -158,25 +159,27 @@ def tournament_ddpg(
                         TestThresholdLastRound=actions[0, 1],
                     )
 
-                # TO DO - add epoch # / episode # - as separate dfs to cat?
-                # should I do two, one for env state and one for actions/rewards/done?
-
-                outer_df = pd.DataFrame(dict(epoch=[epoch], episode=[i_epi]))
-                outer_df = pd.concat((outer_df, test_env.get_state()), axis=1)
+                if log_episode:
+                    episode_logger.store(epoch=epoch,
+                                         episode=i_epi,
+                                         action=actions.flatten(),
+                                         **test_env.get_state()
+                                         )
 
                 all_obs, reward, done, _ = test_env.step(actions)
-                # print(f'done {done}')
 
-                outer_df['action'] = [actions.flatten()]
-                outer_df['reward'] = [reward]
-                outer_df['done'] = [done]
-                episode_logger.store(outer_df)
+                if log_episode:
+                    episode_logger.store(
+                                     reward=reward,
+                                     done=done,
+                                     )
 
                 episode_return += reward
                 episode_length += 1
 
-            episode_logger.dump_dataframe()
-            episode_logger.flush()
+            if log_episode:
+                episode_logger.dump_dataframe()
+
             logger.store(
                 TestEpRet0=episode_return[0],
                 TestEpRet1=episode_return[1],
@@ -192,8 +195,6 @@ def tournament_ddpg(
                 TestMaxScore=np.max(test_env.scores),
                 TestMinScore=np.min(test_env.scores),
             )
-        # episode_logger.dump_dataframe()
-        # episode_logger.flush()
 
     start_time = time.time()
 

@@ -1,7 +1,4 @@
 from textwrap import dedent
-import time
-
-import gym
 
 from multiagent_rl.algos.tournament_ddpg import *
 from multiagent_rl.algos.ultimatum_agents import *
@@ -9,9 +6,6 @@ from multiagent_rl.environments.tournament_env import *
 
 from multiagent_rl.user_config import (
     DEFAULT_DATA_DIR,
-    FORCE_DATESTAMP,
-    DEFAULT_SHORTHAND,
-    WAIT_BEFORE_LAUNCH,
 )
 from multiagent_rl.utils.logx import colorize
 
@@ -71,62 +65,9 @@ max_episode_len = 100
 
 logger_kwargs, output_msg = logging_info("dual_ultimatum", subdir="dual_ultimatum")
 
-# const_offer = 0.5
-# const_threshold = 0.5
-# dualultimatum_ddpg(
-#     agent_fn=DDPGAgent,
-#     player_2=ConstantBot(offer=const_offer, threshold=const_threshold),
-#     env_fn=DualUltimatum,
-#     epochs=epochs,
-#     steps_per_epoch=steps_per_epoch,
-#     max_episode_len=max_episode_len,
-#     test_episodes=200,
-# )
-
-
 static_agent_kwargs = dict(
     mean_offer=0.2, std_offer=0.00001, mean_threshold=0.55, std_threshold=0.00001
 )
-
-# dualultimatum_ddpg(
-#     agent_1_fn=DDPGAgent,
-#     agent_2_fn=StaticDistribBot,
-#     agent_2_kwargs=static_agent_kwargs,
-#     env_fn=DualUltimatum,
-#     epochs=epochs,
-#     steps_per_epoch=steps_per_epoch,
-#     max_episode_len=max_episode_len,
-#     test_episodes=200,
-# )
-#
-# dualultimatum_ddpg(
-#     agent_2_fn=DDPGAgent,
-#     agent_1_fn=StaticDistribBot,
-#     agent_1_kwargs=static_agent_kwargs,
-#     env_fn=DualUltimatum,
-#     epochs=epochs,
-#     steps_per_epoch=steps_per_epoch,
-#     max_episode_len=max_episode_len,
-#     test_episodes=200,
-# )
-
-# dualultimatum_ddpg(
-#     agent_1_fn=DDPGAgent,
-#     agent_1_kwargs=static_agent_kwargs,
-#     agent_2_fn=DDPGAgent,
-#     agent_2_kwargs=static_agent_kwargs,
-#     env_fn=DualUltimatum,
-#     epochs=epochs,
-#     steps_per_epoch=steps_per_epoch,
-#     max_episode_len=max_episode_len,
-#     test_episodes=200,
-# )
-
-
-# tournament_ddpg(seed=8571,
-#                 # bottom_cutoff=1,
-#                 steps_per_epoch=4000,)
-
 
 # Test all bots
 # logger_kwargs, output_msg = logging_info("tournament", subdir="dual_ultimatum")
@@ -148,23 +89,6 @@ static_agent_kwargs = dict(
 #     env_kwargs=env_kwargs,
 # )
 
-# Test constant bot w/ guaranteed winner
-# logger_kwargs, output_msg = logging_info("tournament", subdir="dual_ultimatum")
-# env_kwargs = dict(top_cutoff=2, bottom_cutoff=None, top_reward=1.0, bottom_reward=1.0,)
-# agent_kwargs_constantbot = dict(offer=0.6, threshold=0.2)
-# agents = [ConstantBot, ConstantBot, ConstantBot, ConstantBot]
-# agent_kwargs_winning = dict(offer=0.200001, threshold=0.0)
-# agents_kwargs = [agent_kwargs_winning, agent_kwargs_constantbot, agent_kwargs_constantbot, agent_kwargs_constantbot]
-# tournament_ddpg(
-#     seed=42,
-#     steps_per_epoch=4000,
-#     num_agents=4,
-#     env_fn=RoundRobinTournament,
-#     agents=agents,
-#     agents_kwargs=agents_kwargs,
-#     logger_kwargs=logger_kwargs,
-#     env_kwargs=env_kwargs,
-# )
 
 # Test DDPG vs constant bots
 logger_kwargs, output_msg = logging_info("tournament", subdir="dual_ultimatum")
@@ -215,7 +139,7 @@ tournament_ddpg(
     seed=1736,
     steps_per_epoch=5000,
     epochs=50,
-    save_freq=1,
+    save_freq=2,
     start_steps=0,
     sample_size=4096,
     update_after=0,
@@ -227,70 +151,3 @@ tournament_ddpg(
     q_file="q",
 )
 
-
-# tournament_ddpg(
-#     seed=42,
-#     steps_per_epoch=4000,
-#     num_agents=4,
-#     logger_kwargs=logger_kwargs,
-#     env_kwargs=env_kwargs,
-# )
-#
-# logger_kwargs, output_msg = logging_info("tournament", subdir="dual_ultimatum")
-# env_kwargs = dict(top_cutoff=1, bottom_cutoff=1, top_reward=1.0, bottom_reward=1.0,)
-# tournament_ddpg(
-#     seed=42,
-#     steps_per_epoch=4000,
-#     num_agents=4,
-#     logger_kwargs=logger_kwargs,
-#     env_kwargs=env_kwargs,
-# )
-
-
-# env_fn = DualUltimatumTournament
-# num_agents = 4
-
-# dualultimatum_bots(
-#     ConstantBot(offer=0.5, threshold=0.5),
-#     ConstantBot(offer=0.5, threshold=0.5),
-#     seed=seed,
-#     epochs=epochs,
-#     steps_per_epoch=steps_per_epoch,
-#     logger_kwargs=logger_kwargs,
-# )
-
-# dualultimatum_bots(
-#     ConstantBot(offer=0.49, threshold=0.5),
-#     ConstantBot(offer=0.5, threshold=0.5),
-#     seed=seed,
-#     epochs=epochs,
-#     steps_per_epoch=steps_per_epoch,
-#     logger_kwargs=logger_kwargs,
-# )
-
-# dualultimatum_bots(
-#     ConstantBot(offer=0.9, threshold=0.5),
-#     ConstantBot(offer=0.5, threshold=0.5),
-#     seed=seed,
-#     epochs=epochs,
-#     steps_per_epoch=steps_per_epoch,
-#     logger_kwargs=logger_kwargs,
-# )
-
-# dualultimatum_bots(
-#     StaticDistribBot(),
-#     ConstantBot(offer=0.5, threshold=0.5),
-#     seed=seed,
-#     epochs=epochs,
-#     steps_per_epoch=steps_per_epoch,
-#     logger_kwargs=logger_kwargs,
-# )
-
-# dualultimatum_bots(
-#     ConstantBot(offer=0.5, threshold=0.5),
-#     StaticDistribBot(),
-#     seed=seed,
-#     epochs=epochs,
-#     steps_per_epoch=steps_per_epoch,
-#     logger_kwargs=logger_kwargs,
-# )

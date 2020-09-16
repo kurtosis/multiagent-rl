@@ -371,7 +371,7 @@ class EpochLogger(Logger):
         return mpi_statistics_scalar(vals)
 
 
-class EpisodeLogger(Logger):
+class EpisodeLogger(EpochLogger):
     def __init__(
         self,
         num_agents=None,
@@ -384,42 +384,25 @@ class EpisodeLogger(Logger):
         super().__init__(*args, **kwargs)
         assert num_agents is not None
         self.num_agents = num_agents
-        self.episode_list = []
+        # self.episode_list = []
         self.output_dir = output_dir or "/tmp/experiments/%i" % int(time.time())
         self.output_file = osp.join(self.output_dir, output_fname)
         self.float_format = float_format
         self.header = True
 
-    def store(self, state):
-        """
-        Save something into the epoch_logger's current state.
-
-        Provide an arbitrary number of keyword arguments with numerical
-        values.
-        """
-        self.episode_list.append(state)
-
-    def create_dataframe(self):
-        self.episode_df = pd.concat(self.episode_list)
-        self.episode_df[
-            [f"opponent_{i}" for i in range(self.num_agents)]
-        ] = pd.DataFrame(
-            self.episode_df["opponent"].tolist(), index=self.episode_df.index
-        )
-        self.episode_df[[f"score_{i}" for i in range(self.num_agents)]] = pd.DataFrame(
-            self.episode_df["scores"].tolist(), index=self.episode_df.index
-        )
-        self.episode_df[
-            [f"action_{i}_{j}" for i in range(self.num_agents) for j in range(2)]
-        ] = pd.DataFrame(
-            self.episode_df["action"].tolist(), index=self.episode_df.index
-        )
-        self.episode_df[[f"reward_{i}" for i in range(self.num_agents)]] = pd.DataFrame(
-            self.episode_df["reward"].tolist(), index=self.episode_df.index
-        )
-        self.episode_df.drop(
-            columns=["opponent", "scores", "action", "reward"], inplace=True
-        )
+    def create_dataframe(
+        self, agent_vars=["opponent", "score", "reward"], action_vars=["action"]
+    ):
+        self.episode_df = pd.DataFrame(self.epoch_dict)
+        for v in agent_vars:
+            self.episode_df[
+                [f"{v}_{i}" for i in range(self.num_agents)]
+            ] = pd.DataFrame(self.episode_df[v].tolist(), index=self.episode_df.index)
+        for v in action_vars:
+            self.episode_df[
+                [f"{v}_{i}_{j}" for i in range(self.num_agents) for j in range(2)]
+            ] = pd.DataFrame(self.episode_df[v].tolist(), index=self.episode_df.index)
+        self.episode_df.drop(columns=agent_vars + action_vars, inplace=True)
 
     def dump_dataframe(self):
         self.create_dataframe()
@@ -431,7 +414,5 @@ class EpisodeLogger(Logger):
             float_format=self.float_format,
         )
         self.header = False
-
-    def flush(self):
-        self.episode_list = []
+        self.epoch_dict = {}
         self.episode_df = None
