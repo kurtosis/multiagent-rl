@@ -120,6 +120,10 @@ agent_kwargs_ddpg = dict(
     q_lr=1e-3,
     # gamma=0,
 )
+
+
+agent_kwargs_lstm = dict(
+)
 # agents = [DDPGAgent, ConstantBot, ConstantBot, ConstantBot]
 # agents_kwargs = [
 #     agent_kwargs_ddpg,
@@ -127,9 +131,10 @@ agent_kwargs_ddpg = dict(
 #     agent_kwargs_constantbot,
 #     agent_kwargs_constantbot,
 # ]
-agents = [DDPGAgent, StaticDistribBot, StaticDistribBot, StaticDistribBot]
+agents = [DDPGLSTMAgent, StaticDistribBot, StaticDistribBot, StaticDistribBot]
 agents_kwargs = [
-    agent_kwargs_ddpg,
+    # agent_kwargs_ddpg,
+    agent_kwargs_lstm,
     agent_kwargs_staticdistribbot,
     agent_kwargs_staticdistribbot,
     agent_kwargs_staticdistribbot,

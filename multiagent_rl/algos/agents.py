@@ -12,6 +12,7 @@ from torch.optim import Adam
 Actor and Critic agents used in various RL algorithms
 """
 
+
 def mlp(layer_sizes, hidden_activation, final_activation, batchnorm=True):
     layers = []
     for i in range(len(layer_sizes) - 1):
@@ -39,7 +40,7 @@ class NormalDistActor(nn.Module):
         log_sigma = -0.5 * np.ones(act_dim, dtype=np.float32)
         self.log_sigma = torch.nn.Parameter(torch.as_tensor(log_sigma))
 
-    def distribution(self, obs):
+    def _distribution(self, obs):
         mu = self.mu_net(obs)
         sigma = torch.exp(self.log_sigma)
         return Normal(mu, sigma)
@@ -78,6 +79,41 @@ class ContinuousEstimator(nn.Module):
         return torch.squeeze(output, -1)  # Critical to ensure v has right shape.
 
 
+class LSTMVEstimator(nn.Module):
+    """
+    LSTM for V(obs)
+    Returns deterministic action.
+    Layer sizes passed as argument.
+    Input dimension: input_size
+    Output dimension: layer_sizes[-1] (should be 1 for V,Q)
+    """
+
+    # def __init__(self, layer_sizes, activation, low, high, **kwargs):
+    def __init__(
+        self,
+        input_size,
+        hidden_size,
+        activation=nn.ReLU,
+        final_activation=nn.Identity,
+        **kwargs
+    ):
+        # def __init__(self, layer_sizes, activation, final_activation=nn.Identity, **kwargs):
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.lstm = nn.LSTM(input_size, hidden_size)
+        self.value_mlp = mlp([hidden_size, 1], activation, final_activation)
+
+    def forward(self, input, h=None, c=None):
+        if h is None:
+            h = torch.zeros(self.hidden_size)
+        if c is None:
+            c = torch.zeros(self.hidden_size)
+        lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (h, c))
+        value = self.value_mlp(lstm_out)
+        return value, (h, c)
+
+
 class BoundedDeterministicActor(nn.Module):
     """
     MLP net for actor in bounded continuous action space.
@@ -96,6 +132,84 @@ class BoundedDeterministicActor(nn.Module):
     def forward(self, x):
         output = (self.net(x) + 1) * self.width / 2 + self.low
         return output
+
+
+class LSTMDeterministicActor(nn.Module):
+    """
+    MLP net for actor in bounded continuous action space.
+    Returns deterministic action.
+    Layer sizes passed as argument.
+    Input dimension: layer_sizes[0]
+    Output dimension: layer_sizes[-1] (should be 1 for V,Q)
+    """
+
+    # def __init__(self, layer_sizes, activation, low, high, **kwargs):
+    def __init__(self, input_size, hidden_size, action_size, low, high, **kwargs):
+        super().__init__()
+        # self.net = mlp(layer_sizes, activation, nn.Tanh)
+
+        self.low = torch.as_tensor(low)
+        self.width = torch.as_tensor(high - low)
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.action_size = action_size
+        self.lstm = nn.LSTM(input_size, hidden_size)
+        self.action_mlp = mlp([hidden_size, action_size], nn.Identity, nn.Tanh)
+
+    def forward(self, input, h=None, c=None):
+        if h is None:
+            h = torch.zeros(self.hidden_size)
+        if c is None:
+            c = torch.zeros(self.hidden_size)
+        lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (h, c))
+        x = self.action_mlp(lstm_out)
+        action_out = (x + 1) * self.width / 2 + self.low
+        return action_out, (h, c)
+
+
+class LSTMJoinedActorCritic(nn.Module):
+    """
+    MLP net for actor + value in bounded continuous action space.
+    Returns deterministic action.
+    Layer sizes passed as argument.
+    Input dimension: layer_sizes[0]
+    Output dimension: layer_sizes[-1] (should be 1 for V,Q)
+    """
+
+    # def __init__(self, layer_sizes, activation, low, high, **kwargs):
+    def __init__(
+        self,
+        input_size,
+        hidden_size,
+        action_size,
+        low,
+        high,
+        activation,
+        final_activation=nn.Identity,
+        **kwargs
+    ):
+        super().__init__()
+        # self.net = mlp(layer_sizes, activation, nn.Tanh)
+
+        self.low = torch.as_tensor(low)
+        self.width = torch.as_tensor(high - low)
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.action_size = action_size
+        self.lstm = nn.LSTM(input_size, hidden_size)
+        self.action_mlp = mlp([hidden_size, action_size], nn.Identity, nn.Tanh)
+        self.value_mlp = mlp([hidden_size, 1], activation, final_activation)
+
+    def forward(self, input, h=None, c=None):
+        if h is None:
+            h = torch.zeros(self.hidden_size)
+        if c is None:
+            c = torch.zeros(self.hidden_size)
+        lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (h, c))
+        x = self.action_mlp(lstm_out)
+        action_out = (x + 1) * self.width / 2 + self.low
+        value = self.value_mlp(lstm_out)
+        return action_out, value, (h, c)
 
 
 class BoundedStochasticActor(nn.Module):
@@ -406,3 +520,117 @@ class SACAgent(nn.Module):
         return act.numpy()
 
 
+class DDPGLSTMAgent(nn.Module):
+    """
+    Agent to be used in DDPG.
+    Contains:
+    - estimated Q*(s,a,)
+    - policy
+    """
+
+    def __init__(
+        self,
+        obs_dim=None,
+        obs_space=None,
+        action_space=None,
+        hidden_size=64,
+        noise_std=0.1,
+        pi_lr=1e-3,
+        q_lr=1e-3,
+        polyak=0.995,
+        gamma=0.99,
+        **kwargs
+    ):
+        super().__init__()
+        if obs_dim is None:
+            obs_dim = obs_space.shape[0]
+        self.act_dim = action_space.shape[0]
+        self.act_low = action_space.low
+        self.act_high = action_space.high
+
+        self.noise_std = noise_std
+        self.polyak = polyak
+        self.gamma = gamma
+
+        self.pi = LSTMDeterministicActor(
+            input_size=obs_dim,
+            hidden_size=hidden_size,
+            action_size=self.act_dim,
+            low=self.act_low,
+            high=self.act_high,
+            **kwargs
+        )
+        self.q = LSTMVEstimator(
+            input_size=obs_dim + self.act_dim,
+            hidden_size=hidden_size,
+            action_size=self.act_dim,
+        )
+        self.pi_optimizer = Adam(self.pi.parameters(), lr=pi_lr)
+        self.q_optimizer = Adam(self.q.parameters(), lr=q_lr)
+
+        self.target = deepcopy(self)
+        for p in self.target.parameters():
+            p.requires_grad = False
+
+    def act(self, obs, noise=False):
+        """Return noisy action as numpy array, **without computing grads**"""
+        # TO DO: fix how noise and clipping are handled for multiple dimensions.
+        with torch.no_grad():
+            act = self.pi(obs).numpy()
+            if noise:
+                act += self.noise_std * np.random.randn(self.act_dim)
+            act = np.clip(act, self.act_low[0], self.act_high[0])
+        return act
+
+    def update_pi(self, data=None):
+        # Freeze Q params during policy update to save time
+        for p in self.q.parameters():
+            p.requires_grad = False
+        self.pi_optimizer.zero_grad()
+        o = data["obs"]
+        a = self.pi(o)
+        pi_loss = -self.q(torch.cat((o, a), dim=-1)).mean()
+        pi_loss.backward()
+        self.pi_optimizer.step()
+        # Unfreeze Q params after policy update
+        for p in self.q.parameters():
+            p.requires_grad = True
+        return pi_loss
+
+    def update_q(self, data=None, agent=None):
+        r, o_next, d = data["reward"], data["obs_next"], data["done"]
+        if agent is not None:
+            r = r[:, agent]
+        self.q_optimizer.zero_grad()
+        with torch.no_grad():
+            a_next = self.target.pi(o_next)
+            q_target = self.target.q(torch.cat((o_next, a_next), dim=-1))
+            q_target = r + self.gamma * (1 - d) * q_target
+        o, a = data["obs"], data["act"]
+        if agent is not None:
+            a = a[:, agent]
+        q = self.q(torch.cat((o, a), dim=-1))
+        q_loss_info = {"QVals": q.detach().numpy()}
+        q_loss = ((q - q_target) ** 2).mean()
+        q_loss.backward()
+        self.q_optimizer.step()
+        return q_loss, q_loss_info
+
+    def update_target(self):
+        with torch.no_grad():
+            # Use in place method from Spinning Up, faster than creating a new state_dict
+            for p, p_target in zip(self.pi.parameters(), self.target.pi.parameters()):
+                p_target.data.mul_(self.polyak)
+                p_target.data.add_((1 - self.polyak) * p.data)
+            for p, p_target in zip(self.q.parameters(), self.target.q.parameters()):
+                p_target.data.mul_(self.polyak)
+                p_target.data.add_((1 - self.polyak) * p.data)
+
+    def update(self, data, logger=None, **kwargs):
+        pi_loss = self.update_pi(data=data)
+        q_loss, q_loss_info = self.update_q(data=data, **kwargs)
+        self.update_target()
+        # Record things
+        if logger is not None:
+            logger.store(LossQ=q_loss.item(), LossPi=pi_loss.item(), **q_loss_info)
+        return pi_loss, q_loss, q_loss_info

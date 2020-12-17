@@ -6,6 +6,7 @@ import torch
 Classes for buffers that are used by policy-gradient and deep-Q training.
 """
 
+
 def discount_cumsum(x, discount):
     """Compute cumsum with discounting used in GAE (generalized adv estimn).
     (My implementation)"""
@@ -98,6 +99,38 @@ class TrajectoryBuffer:
         }
         data = {k: torch.as_tensor(v, dtype=torch.float32) for k, v in data.items()}
         return data
+
+
+class RDPGBuffer:
+    """
+    Stores completed episodes for use in RDPG with recurrent networks.
+    """
+    def __init__(self, max_size):
+        self.ptr = 0
+        # self.path_start = 0
+        self.max_size = max_size
+        self.current_start = self.ptr
+        self.current_episode = []
+        self.episodes = [None]*max_size
+        self.filled_size = 0
+        self.full = False
+
+    def store(self, obs, act, reward, done):
+        """Add current step variables to buffer."""
+        self.current_episode.append(dict(obs=obs, act=act, reward=reward))
+        if done == 1:
+            self.episodes[self.ptr] = self.current_episode
+            self.current_episode = []
+            self.ptr += 1
+            if not self.full:
+                self.filled_size += 1
+            if self.ptr == self.max_size:
+                self.ptr = 0
+                self.full = True
+
+    def sample_episodes(self, sample_size=100):
+        sample_indexes = np.random.randint(0, self.filled_size, sample_size)
+        return self.episodes[sample_indexes]
 
 
 # For off-policy methods
