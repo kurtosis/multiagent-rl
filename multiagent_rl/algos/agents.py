@@ -79,41 +79,6 @@ class ContinuousEstimator(nn.Module):
         return torch.squeeze(output, -1)  # Critical to ensure v has right shape.
 
 
-class LSTMVEstimator(nn.Module):
-    """
-    LSTM for V(obs)
-    Returns deterministic action.
-    Layer sizes passed as argument.
-    Input dimension: input_size
-    Output dimension: layer_sizes[-1] (should be 1 for V,Q)
-    """
-
-    # def __init__(self, layer_sizes, activation, low, high, **kwargs):
-    def __init__(
-        self,
-        input_size,
-        hidden_size,
-        activation=nn.ReLU,
-        final_activation=nn.Identity,
-        **kwargs
-    ):
-        # def __init__(self, layer_sizes, activation, final_activation=nn.Identity, **kwargs):
-        super().__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.lstm = nn.LSTM(input_size, hidden_size)
-        self.value_mlp = mlp([hidden_size, 1], activation, final_activation)
-
-    def forward(self, input, h=None, c=None):
-        if h is None:
-            h = torch.zeros(self.hidden_size)
-        if c is None:
-            c = torch.zeros(self.hidden_size)
-        lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (h, c))
-        value = self.value_mlp(lstm_out)
-        return value, (h, c)
-
-
 class BoundedDeterministicActor(nn.Module):
     """
     MLP net for actor in bounded continuous action space.
@@ -146,8 +111,6 @@ class LSTMDeterministicActor(nn.Module):
     # def __init__(self, layer_sizes, activation, low, high, **kwargs):
     def __init__(self, input_size, hidden_size, action_size, low, high, **kwargs):
         super().__init__()
-        # self.net = mlp(layer_sizes, activation, nn.Tanh)
-
         self.low = torch.as_tensor(low)
         self.width = torch.as_tensor(high - low)
         self.input_size = input_size
@@ -155,16 +118,62 @@ class LSTMDeterministicActor(nn.Module):
         self.action_size = action_size
         self.lstm = nn.LSTM(input_size, hidden_size)
         self.action_mlp = mlp([hidden_size, action_size], nn.Identity, nn.Tanh)
+        self.h = torch.zeros((1, 1, self.hidden_size))
+        self.c = torch.zeros((1, 1, self.hidden_size))
 
     def forward(self, input, h=None, c=None):
-        if h is None:
-            h = torch.zeros(self.hidden_size)
-        if c is None:
-            c = torch.zeros(self.hidden_size)
-        lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (h, c))
+        # if h is None:
+        #     h = torch.zeros(self.hidden_size)
+        # if c is None:
+        #     c = torch.zeros(self.hidden_size)
+        lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (self.h, self.c))
+        self.h, self.c = h, c
         x = self.action_mlp(lstm_out)
         action_out = (x + 1) * self.width / 2 + self.low
         return action_out, (h, c)
+
+    def reset_state(self):
+        self.h = torch.zeros((1, 1, self.hidden_size))
+        self.c = torch.zeros((1, 1, self.hidden_size))
+
+
+class LSTMVEstimator(nn.Module):
+    """
+    LSTM for V(obs) or Q(obs, act)
+    Returns deterministic value.
+    Layer sizes passed as argument.
+    Input dimension: input_size
+    Output dimension: layer_sizes[-1] (should be 1 for V,Q)
+    """
+
+    # def __init__(self, layer_sizes, activation, low, high, **kwargs):
+    def __init__(
+        self,
+        input_size,
+        hidden_size,
+        activation=nn.ReLU,
+        final_activation=nn.Identity,
+        **kwargs
+    ):
+        # def __init__(self, layer_sizes, activation, final_activation=nn.Identity, **kwargs):
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.lstm = nn.LSTM(input_size, hidden_size)
+        self.value_mlp = mlp([hidden_size, 1], activation, final_activation)
+        self.h = torch.zeros((1, 1, self.hidden_size))
+        self.c = torch.zeros((1, 1, self.hidden_size))
+
+    def forward(self, input, h=None, c=None):
+        # if h is None:
+        #     h = torch.zeros(self.hidden_size)
+        # if c is None:
+        #     c = torch.zeros(self.hidden_size)
+        # lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (h, c))
+        lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (self.h, self.c))
+        self.h, self.c = h, c
+        value = self.value_mlp(lstm_out)
+        return value, (h, c)
 
 
 class LSTMJoinedActorCritic(nn.Module):
@@ -184,7 +193,7 @@ class LSTMJoinedActorCritic(nn.Module):
         action_size,
         low,
         high,
-        activation,
+        activation=nn.ReLU,
         final_activation=nn.Identity,
         **kwargs
     ):
@@ -199,13 +208,16 @@ class LSTMJoinedActorCritic(nn.Module):
         self.lstm = nn.LSTM(input_size, hidden_size)
         self.action_mlp = mlp([hidden_size, action_size], nn.Identity, nn.Tanh)
         self.value_mlp = mlp([hidden_size, 1], activation, final_activation)
+        self.h = torch.zeros((1, 1, self.hidden_size))
+        self.c = torch.zeros((1, 1, self.hidden_size))
 
     def forward(self, input, h=None, c=None):
-        if h is None:
-            h = torch.zeros(self.hidden_size)
-        if c is None:
-            c = torch.zeros(self.hidden_size)
-        lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (h, c))
+        # if h is None:
+        #     h = torch.zeros(self.hidden_size)
+        # if c is None:
+        #     c = torch.zeros(self.hidden_size)
+        lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (self.h, self.c))
+        self.h, self.c = h, c
         x = self.action_mlp(lstm_out)
         action_out = (x + 1) * self.width / 2 + self.low
         value = self.value_mlp(lstm_out)
@@ -520,9 +532,9 @@ class SACAgent(nn.Module):
         return act.numpy()
 
 
-class DDPGLSTMAgent(nn.Module):
+class RDPGAgent(nn.Module):
     """
-    Agent to be used in DDPG.
+    Agent to be used in RDPG.
     Contains:
     - estimated Q*(s,a,)
     - policy

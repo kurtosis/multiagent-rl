@@ -41,6 +41,84 @@ class OneHot(gym.Space):
         return self.n == other.n
 
 
+class ConstantDualUltimatum(gym.Env):
+    """A single-agent environment consisting of a 'dual ultimatum' game against a constant bot"""
+
+    def __init__(self, reward="ultimatum", opponent_offer=0.5, opponent_threshold=0.5):
+        super(ConstantDualUltimatum, self).__init__()
+        self.opponent_offer = opponent_offer
+        self.opponent_threshold = opponent_threshold
+        self.action_space = spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32)
+        self.observation_space = spaces.Tuple(
+                    (
+                        spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32),
+                        spaces.Discrete(2),
+                    )
+                )
+        if reward == "l2":
+            self.rewards = self._l2_rewards
+        elif reward == "l1":
+            self.rewards = self._l1_rewards
+        elif reward == "l1_const":
+            self.rewards = self._l1_const_rewards
+        else:
+            self.rewards = self._ultimatum_rewards
+
+    def _ultimatum_rewards(self, action):
+        offer, threshold = action
+        if offer + EPS >= self.opponent_threshold and self.opponent_offer + EPS >= threshold:
+            reward = (1 - offer) + self.opponent_offer
+        else:
+            reward = 0
+        return reward
+
+    def _l1_rewards(self, action):
+        """Simple reward for testing"""
+        offer_0, _ = action
+        l1 = -np.abs(offer_0 - offer_1)
+        rewards = np.array([l1, l1])
+        return rewards
+
+    def _l2_rewards(self, actions):
+        """Simple reward for testing"""
+        offer_0, _ = actions[0, :]
+        offer_1, _ = actions[1, :]
+        l2 = -((offer_0 - offer_1) ** 2)
+        rewards = np.array([l2, l2])
+        return rewards
+
+    def _l1_const_rewards(self, actions, target=0.3):
+        """Simple reward for testing"""
+        offer_0, _ = actions[0, :]
+        offer_1, _ = actions[1, :]
+        r_0 = -np.abs(offer_0 - target)
+        r_1 = -np.abs(offer_1 - target)
+        rewards = np.array([r_0, r_1])
+        return rewards
+
+    def step(self, actions):
+        rewards = self.rewards(actions)
+        obs = np.array(
+            [
+                np.concatenate((actions[0, :], actions[1, :])),
+                np.concatenate((actions[1, :], actions[0, :])),
+            ]
+        )
+        # Add flag indicating this is not the first step
+        obs = np.concatenate((obs, np.zeros((2, 1))), axis=1)
+        done = False
+        return obs, rewards, done, {}
+
+    def reset(self):
+        # Create init state obs, with flag indicating this is the first step
+        obs = np.zeros((2, 5))
+        obs[:, -1] = 1
+        return obs
+
+    def render(self, mode="human"):
+        pass
+
+
 class DualUltimatum(gym.Env):
     """An environment consisting of a 'dual ultimatum' game'"""
 
@@ -133,7 +211,7 @@ class DualUltimatum(gym.Env):
 
 
 class MatrixGame(gym.Env):
-    """An environment consisting of a matrix game with stochastic outomes"""
+    """An environment consisting of a matrix game with stochastic outcomes"""
 
     NUM_ACTIONS = 3
     NUM_STATES = NUM_ACTIONS ** 2 + 1

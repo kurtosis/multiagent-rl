@@ -26,7 +26,6 @@ from multiagent_rl.environments.tournament_env import *
 from multiagent_rl.utils.logx import EpochLogger
 
 
-
 def mlp(layer_sizes, hidden_activation, final_activation):
     layers = []
     for i in range(len(layer_sizes) - 1):
@@ -386,8 +385,6 @@ def dualultimatum_ddpg(
         # logger.log_tabular("LossQ", average_only=True)
         logger.log_tabular("Time", time.time() - start_time)
         logger.dump_tabular()
-
-
 
 
 def dualultimatum_td3(

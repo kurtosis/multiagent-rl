@@ -103,21 +103,24 @@ class TrajectoryBuffer:
 
 class RDPGBuffer:
     """
-    Stores completed episodes for use in RDPG with recurrent networks.
+    Stores completed episodes for use in RDPG with recurrent networks. Buffer is a list
+    of (complete) episodes. Once buffer is full, older episodes are overwritten.
     """
+
     def __init__(self, max_size):
         self.ptr = 0
         # self.path_start = 0
         self.max_size = max_size
         self.current_start = self.ptr
         self.current_episode = []
-        self.episodes = [None]*max_size
+        self.episodes = [None] * max_size
         self.filled_size = 0
         self.full = False
 
-    def store(self, obs, act, reward, done):
-        """Add current step variables to buffer."""
-        self.current_episode.append(dict(obs=obs, act=act, reward=reward))
+    def store(self, obs, act, reward, obs_next, done):
+        """Add latest step variables to current trajectory. If done, add trajector
+        to buffer and reset. Loop pointer back to 0 when buffer is full."""
+        self.current_episode.append(dict(obs=obs, act=act, reward=reward, obs_next=obs_next))
         if done == 1:
             self.episodes[self.ptr] = self.current_episode
             self.current_episode = []
