@@ -1,6 +1,7 @@
 from copy import copy
 import numpy as np
 import pandas as pd
+import random
 from random import sample
 from scipy.stats import rankdata
 
@@ -50,11 +51,11 @@ class ConstantDualUltimatum(gym.Env):
         self.opponent_threshold = opponent_threshold
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32)
         self.observation_space = spaces.Tuple(
-                    (
-                        spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32),
-                        spaces.Discrete(2),
-                    )
-                )
+            (
+                spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32),
+                spaces.Discrete(2),
+            )
+        )
         if reward == "l2":
             self.rewards = self._l2_rewards
         elif reward == "l1":
@@ -66,7 +67,10 @@ class ConstantDualUltimatum(gym.Env):
 
     def _ultimatum_rewards(self, action):
         offer, threshold = action
-        if offer + EPS >= self.opponent_threshold and self.opponent_offer + EPS >= threshold:
+        if (
+            offer + EPS >= self.opponent_threshold
+            and self.opponent_offer + EPS >= threshold
+        ):
             reward = (1 - offer) + self.opponent_offer
         else:
             reward = 0
@@ -491,3 +495,52 @@ class RoundRobinTournament(gym.Env):
         # ).copy(deep=True)
 
         return env_state
+
+
+class MimicObs(gym.Env):
+    """A simple environment for testing in which reward is based on distance to last obs"""
+
+    def __init__(self, ep_len=10, reward="l1", target="last"):
+        super(MimicObs, self).__init__()
+        self.action_space = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
+        self.observation_space = spaces.Box(
+            low=0.0, high=1.0, shape=(1,), dtype=np.float32
+        )
+        self.ep_len = ep_len
+        self.current_turn = 0
+        self.running_sum = 0
+        self.target = target
+        self.last_obs = np.array([random.random()])
+        if reward == "l2":
+            self.reward = lambda a, b: -((a - b) ** 2)
+        elif reward == "l1":
+            self.reward = lambda a, b: -np.abs(a - b)
+
+    def step(self, action):
+        if self.target == "mean":
+            self.running_sum += self.last_obs
+            target = self.running_sum / (self.current_turn + 1)
+        elif self.target == "last":
+            target = self.last_obs
+        else:
+            target = 0.5
+        reward = self.reward(action, target)
+        self.last_obs = np.array([random.random()])
+        obs = self.last_obs
+        if self.current_turn == (self.ep_len - 1):
+            done = 1
+            self.current_turn = 0
+            self.running_sum = 0
+        else:
+            done = 0
+            self.current_turn += 1
+        return obs, reward, done, {}
+
+    def reset(self):
+        self.current_turn = 0
+        self.last_obs = np.array([random.random()])
+        obs = self.last_obs
+        return obs
+
+    def render(self, mode="human"):
+        pass

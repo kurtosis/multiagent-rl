@@ -118,9 +118,11 @@ class RDPGBuffer:
         self.full = False
 
     def store(self, obs, act, reward, obs_next, done):
-        """Add latest step variables to current trajectory. If done, add trajector
+        """Add latest step variables to current trajectory. If done, add trajectory
         to buffer and reset. Loop pointer back to 0 when buffer is full."""
-        self.current_episode.append(dict(obs=obs, act=act, reward=reward, obs_next=obs_next))
+        self.current_episode.append(
+            dict(obs=obs, act=act, reward=reward, obs_next=obs_next, done=done)
+        )
         if done == 1:
             self.episodes[self.ptr] = self.current_episode
             self.current_episode = []
@@ -131,9 +133,29 @@ class RDPGBuffer:
                 self.ptr = 0
                 self.full = True
 
+    def reshape_samples(self, samples):
+        vars = ["obs", "act", "reward", "obs_next", "done"]
+        data = {v : torch.as_tensor([[x[v] for x in ep] for ep in samples], dtype=torch.float32) for v in vars}
+        for v in vars:
+            data[v] = data[v].transpose(0, 1)
+        return data
+
     def sample_episodes(self, sample_size=100):
         sample_indexes = np.random.randint(0, self.filled_size, sample_size)
-        return self.episodes[sample_indexes]
+        samples = [self.episodes[i] for i in sample_indexes]
+        return self.reshape_samples(samples)
+
+    def get_latest_episodes(self, sample_size=100):
+        end = self.ptr
+        if self.ptr >= sample_size:
+            start = self.ptr - sample_size
+            samples = self.episodes[start:end]
+            self.reshape_samples(samples)
+
+        return samples
+
+    def clear_current_episode(self):
+        self.current_episode = []
 
 
 # For off-policy methods

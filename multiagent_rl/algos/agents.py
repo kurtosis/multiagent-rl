@@ -121,20 +121,29 @@ class LSTMDeterministicActor(nn.Module):
         self.h = torch.zeros((1, 1, self.hidden_size))
         self.c = torch.zeros((1, 1, self.hidden_size))
 
-    def forward(self, input, h=None, c=None):
-        # if h is None:
-        #     h = torch.zeros(self.hidden_size)
-        # if c is None:
-        #     c = torch.zeros(self.hidden_size)
-        lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (self.h, self.c))
-        self.h, self.c = h, c
+    def forward(self, input, action_only=True):
+        """The Agent must distinguish between generating actions sequentially (and maintaining hidden
+         state) and training on a batch of trajectories."""
+        if len(input.shape) == 3:
+            batch_size = input.shape[1]
+            h = torch.zeros((1, batch_size, self.hidden_size))
+            c = torch.zeros((1, batch_size, self.hidden_size))
+            lstm_out, (h, c) = self.lstm(input, (h, c))
+        else:
+            lstm_out, (h, c) = self.lstm(
+                input.view(len(input), 1, -1), (self.h, self.c)
+            )
+            self.h, self.c = h, c
         x = self.action_mlp(lstm_out)
         action_out = (x + 1) * self.width / 2 + self.low
-        return action_out, (h, c)
+        if action_only:
+            return action_out
+        else:
+            return action_out, (h, c)
 
-    def reset_state(self):
-        self.h = torch.zeros((1, 1, self.hidden_size))
-        self.c = torch.zeros((1, 1, self.hidden_size))
+    def reset_state(self, batch_size=1):
+        self.h = torch.zeros((1, batch_size, self.hidden_size))
+        self.c = torch.zeros((1, batch_size, self.hidden_size))
 
 
 class LSTMVEstimator(nn.Module):
@@ -164,16 +173,28 @@ class LSTMVEstimator(nn.Module):
         self.h = torch.zeros((1, 1, self.hidden_size))
         self.c = torch.zeros((1, 1, self.hidden_size))
 
-    def forward(self, input, h=None, c=None):
-        # if h is None:
-        #     h = torch.zeros(self.hidden_size)
-        # if c is None:
-        #     c = torch.zeros(self.hidden_size)
-        # lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (h, c))
-        lstm_out, (h, c) = self.lstm(input.view(len(input), 1, -1), (self.h, self.c))
-        self.h, self.c = h, c
+    def forward(self, input, value_only=True):
+        """The Agent must distinguish between generating actions sequentially (and maintaining hidden
+         state) and training on a batch of trajectories."""
+        if len(input.shape) == 3:
+            batch_size = input.shape[1]
+            h = torch.zeros((1, batch_size, self.hidden_size))
+            c = torch.zeros((1, batch_size, self.hidden_size))
+            lstm_out, (h, c) = self.lstm(input, (h, c))
+        else:
+            lstm_out, (h, c) = self.lstm(
+                input.view(len(input), 1, -1), (self.h, self.c)
+            )
+            self.h, self.c = h, c
         value = self.value_mlp(lstm_out)
-        return value, (h, c)
+        if value_only:
+            return value
+        else:
+            return value, (h, c)
+
+    def reset_state(self, batch_size=1):
+        self.h = torch.zeros((1, batch_size, self.hidden_size))
+        self.c = torch.zeros((1, batch_size, self.hidden_size))
 
 
 class LSTMJoinedActorCritic(nn.Module):
@@ -322,9 +343,9 @@ class DDPGAgent(nn.Module):
 
     def __init__(
         self,
-        obs_dim=None,
         obs_space=None,
         action_space=None,
+        obs_dim=None,
         hidden_layers_mu=(64, 64),
         hidden_layers_q=(64, 64),
         activation=nn.ReLU,
@@ -589,6 +610,7 @@ class RDPGAgent(nn.Module):
         # TO DO: fix how noise and clipping are handled for multiple dimensions.
         with torch.no_grad():
             act = self.pi(obs).numpy()
+            act = np.squeeze(act, (0, 1))
             if noise:
                 act += self.noise_std * np.random.randn(self.act_dim)
             act = np.clip(act, self.act_low[0], self.act_high[0])
@@ -600,8 +622,8 @@ class RDPGAgent(nn.Module):
             p.requires_grad = False
         self.pi_optimizer.zero_grad()
         o = data["obs"]
-        a = self.pi(o)
-        pi_loss = -self.q(torch.cat((o, a), dim=-1)).mean()
+        a_proposed = self.pi(o)
+        pi_loss = -self.q(torch.cat((o, a_proposed), dim=-1)).mean()
         pi_loss.backward()
         self.pi_optimizer.step()
         # Unfreeze Q params after policy update
