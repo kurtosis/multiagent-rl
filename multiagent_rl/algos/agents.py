@@ -146,7 +146,7 @@ class LSTMDeterministicActor(nn.Module):
         self.c = torch.zeros((1, batch_size, self.hidden_size))
 
 
-class LSTMVEstimator(nn.Module):
+class LSTMEstimator(nn.Module):
     """
     LSTM for V(obs) or Q(obs, act)
     Returns deterministic value.
@@ -572,6 +572,7 @@ class RDPGAgent(nn.Module):
         q_lr=1e-3,
         polyak=0.995,
         gamma=0.99,
+        q_fn = 'LSTMEstimator',
         **kwargs
     ):
         super().__init__()
@@ -593,11 +594,23 @@ class RDPGAgent(nn.Module):
             high=self.act_high,
             **kwargs
         )
-        self.q = LSTMVEstimator(
-            input_size=obs_dim + self.act_dim,
-            hidden_size=hidden_size,
-            action_size=self.act_dim,
-        )
+
+        # This is a quick hack to test RDPG with a non-LSTM Q function
+        if q_fn == 'ContinuousEstimator':
+            hidden_layers_q = (64, 64)
+            activation = nn.ReLU
+            layer_sizes_q = [obs_dim + self.act_dim] + list(hidden_layers_q) + [1]
+            self.q = ContinuousEstimator(
+                layer_sizes=layer_sizes_q, activation=activation, **kwargs
+            )
+        else:
+            self.q = LSTMEstimator(
+                input_size=obs_dim + self.act_dim,
+                hidden_size=hidden_size,
+                action_size=self.act_dim,
+            )
+
+
         self.pi_optimizer = Adam(self.pi.parameters(), lr=pi_lr)
         self.q_optimizer = Adam(self.q.parameters(), lr=q_lr)
 

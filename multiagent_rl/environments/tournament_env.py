@@ -4,6 +4,7 @@ import pandas as pd
 import random
 from random import sample
 from scipy.stats import rankdata
+import torch
 
 import gym
 from gym import spaces
@@ -500,7 +501,7 @@ class RoundRobinTournament(gym.Env):
 class MimicObs(gym.Env):
     """A simple environment for testing in which reward is based on distance to last obs"""
 
-    def __init__(self, ep_len=10, reward="l1", target="last"):
+    def __init__(self, ep_len=10, reward="l1", target="last", goal_constant=None, goal_mean=False):
         super(MimicObs, self).__init__()
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
         self.observation_space = spaces.Box(
@@ -510,22 +511,25 @@ class MimicObs(gym.Env):
         self.current_turn = 0
         self.running_sum = 0
         self.target = target
-        self.last_obs = np.array([random.random()])
+        self.goal_constant = goal_constant
+        self.goal_mean = goal_mean
+        self.last_obs = np.random.rand(1)
         if reward == "l2":
             self.reward = lambda a, b: -((a - b) ** 2)
         elif reward == "l1":
             self.reward = lambda a, b: -np.abs(a - b)
 
     def step(self, action):
-        if self.target == "mean":
+        if self.goal_constant is not None:
+            target = self.goal_constant
+        elif self.goal_mean:
             self.running_sum += self.last_obs
             target = self.running_sum / (self.current_turn + 1)
-        elif self.target == "last":
-            target = self.last_obs
         else:
-            target = 0.5
+            target = self.last_obs
+
         reward = self.reward(action, target)
-        self.last_obs = np.array([random.random()])
+        self.last_obs = np.random.rand(1)
         obs = self.last_obs
         if self.current_turn == (self.ep_len - 1):
             done = 1
@@ -538,7 +542,7 @@ class MimicObs(gym.Env):
 
     def reset(self):
         self.current_turn = 0
-        self.last_obs = np.array([random.random()])
+        self.last_obs = np.random.rand(1)
         obs = self.last_obs
         return obs
 

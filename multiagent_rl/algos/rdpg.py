@@ -73,15 +73,23 @@ def rdpg(
         r, o_next, d = data["reward"], data["obs_next"], data["done"]
         batch_size = r.shape[1]
         with torch.no_grad():
-            a_next = agent_target.pi(o_next)
+            # TESTING HACK - force a_next to known best action (0.5)
+            # a_next = agent_target.pi(o_next)
+            a_next = 0.5 * torch.ones_like(o_next)
+
             q_target = agent_target.q(torch.cat((o_next, a_next), dim=-1))
+            # reshape so that this will work with DDPG agent (for testing)
+            q_target = q_target.reshape_as(d)
             q_target = r + gamma * (1 - d) * q_target
+            # TESTING HACK - set all future q to 0 (assumes known optimal policy)
+            # q_target = r
         return q_target
 
     def compute_loss_q(data, q_target):
         o, a = data["obs"], data["act"]
         q = agent.q(torch.cat((o, a), dim=-1))
         q_loss_info = {"QVals": q.detach().numpy()}
+        q = q.reshape_as(q_target)
         return ((q - q_target) ** 2).mean(), q_loss_info
 
     # q_time = 0.0
@@ -218,60 +226,3 @@ def rdpg(
         # print(f'target_time {target_time}')
 
 
-import time
-
-
-def test_rdpg_buffer(
-    obs_dim=5, act_dim=2, max_buffer_len=100000, ep_len=3, num_ep=1000, sample_size=100
-):
-    """Fill an RDPG buffer with sample data and verify it can be read from correctly."""
-    buffer = RDPGBuffer(max_buffer_len)
-    t0 = time.time()
-    for i_ep in range(num_ep):
-        for i_turn in range(ep_len):
-            # create random observations and flag for first turn
-            if i_turn == 0:
-                obs = np.zeros(obs_dim - 1)
-                obs = np.append(obs, 1)
-            else:
-                obs = np.random.rand(obs_dim - 1)
-                obs = np.append(obs, 0)
-            # Set done flag to 1 for last turn
-            if i_turn == ep_len - 1:
-                done = 1
-            else:
-                done = 0
-            act = np.random.rand(act_dim)
-            obs_next = np.random.rand(obs_dim - 1)
-            obs_next = np.append(obs, 0)
-            rwd = np.random.rand(1)
-            buffer.store(obs, act, rwd, obs_next, done)
-    t1 = time.time()
-    time_fill = t1 - t0
-    print("Buffer filling completed")
-    print(f"# of episodes in buffer: {buffer.filled_size}")
-    print(f"Is buffer full: {buffer.full}")
-    print(f"First episode: {buffer.episodes[0]}")
-    if not buffer.full:
-        print(f"Empty episode: {buffer.episodes[num_ep]}")
-
-    t0 = time.time()
-    sampled_episodes = buffer.sample_episodes(sample_size=sample_size)
-    t1 = time.time()
-    time_sample = t1 - t0
-
-    t0 = time.time()
-    data = {}
-    data["done"] = np.array([[x["done"] for x in ep] for ep in sampled_episodes])
-    data["obs"] = np.array([[x["obs"] for x in ep] for ep in sampled_episodes])
-    data["act"] = np.array([[x["act"] for x in ep] for ep in sampled_episodes])
-    data["obs_next"] = np.array(
-        [[x["obs_next"] for x in ep] for ep in sampled_episodes]
-    )
-    data["reward"] = np.array([[x["reward"] for x in ep] for ep in sampled_episodes])
-    t1 = time.time()
-    time_reshape = t1 - t0
-
-    print(f"Time to fill (sec): {time_fill}")
-    print(f"Time to sample (sec): {time_sample}")
-    print(f"Time to reshape (sec): {time_reshape}")
