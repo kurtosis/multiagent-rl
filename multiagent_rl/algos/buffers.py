@@ -1,6 +1,7 @@
 import numpy as np
 
 import torch
+from torch.nn.functional import pad
 
 """
 Classes for buffers that are used by policy-gradient and deep-Q training.
@@ -16,12 +17,20 @@ def discount_cumsum(x, discount):
 
 
 def merge_shape(shape1, shape2=None):
-    if shape2 is None:
-        return (shape1,)
-    elif np.isscalar(shape2):
-        return (shape1, shape2)
+    if np.isscalar(shape1):
+        if shape2 is None:
+            return (shape1,)
+        elif np.isscalar(shape2):
+            return shape1, shape2
+        else:
+            return (shape1, *shape2)
     else:
-        return (shape1, *shape2)
+        if shape2 is None:
+            return shape1
+        elif np.isscalar(shape2):
+            return (*shape1, shape2)
+        else:
+            return (*shape1, *shape2)
 
 
 # For on-policy VPG/PPO
@@ -117,11 +126,11 @@ class RDPGBuffer:
         self.filled_size = 0
         self.full = False
 
-    def store(self, obs, act, reward, obs_next, done):
+    def store(self, obs, act, rwd, obs_next, done):
         """Add latest step variables to current trajectory. If done, add trajectory
         to buffer and reset. Loop pointer back to 0 when buffer is full."""
         self.current_episode.append(
-            dict(obs=obs, act=act, reward=reward, obs_next=obs_next, done=done)
+            dict(obs=obs, act=act, rwd=rwd, obs_next=obs_next, done=done)
         )
         if done == 1:
             self.episodes[self.ptr] = self.current_episode
@@ -134,8 +143,13 @@ class RDPGBuffer:
                 self.full = True
 
     def reshape_samples(self, samples):
-        vars = ["obs", "act", "reward", "obs_next", "done"]
-        data = {v : torch.as_tensor([[x[v] for x in ep] for ep in samples], dtype=torch.float32) for v in vars}
+        vars = ["obs", "act", "rwd", "obs_next", "done"]
+        data = {
+            v: torch.as_tensor(
+                [[x[v] for x in ep] for ep in samples], dtype=torch.float32
+            )
+            for v in vars
+        }
         for v in vars:
             data[v] = data[v].transpose(0, 1)
         return data
@@ -156,6 +170,89 @@ class RDPGBuffer:
 
     def clear_current_episode(self):
         self.current_episode = []
+
+
+class FastRDPGBuffer:
+    """
+    Stores completed episodes for use in RDPG with recurrent networks. Buffer is a list
+    of (complete) episodes. Once buffer is full, older episodes are overwritten.
+    """
+
+    def __init__(self, obs_dim, act_dim, max_episode_len, max_episodes):
+        self.obs_dim = obs_dim
+        self.act_dim = act_dim
+        self.max_episode_len = max_episode_len
+        self.max_episodes = max_episodes
+        self.ptr_turn = 0
+        self.ptr_ep = 0
+        # self.path_start = 0
+        self.data = {
+            "obs": np.zeros(merge_shape((max_episode_len, max_episodes), obs_dim), dtype=np.float32),
+            "act": np.zeros(merge_shape((max_episode_len, max_episodes), act_dim), dtype=np.float32),
+            "rwd": np.zeros((max_episode_len, max_episodes, 1), dtype=np.float32),
+            "done": np.ones((max_episode_len, max_episodes, 1), dtype=np.float32),
+            # "act": torch.zeros((max_episode_len, max_episodes) + act_dim),
+            # "rwd": torch.zeros(max_episode_len, max_episodes, 1),
+            # "done": torch.zeros(max_episode_len, max_episodes, 1),
+        }
+        self.current_episode = {
+            "obs": np.zeros(merge_shape((max_episode_len, 1), obs_dim), dtype=np.float32),
+            "act": np.zeros(merge_shape((max_episode_len, 1), act_dim), dtype=np.float32),
+            "rwd": np.zeros((max_episode_len, 1, 1), dtype=np.float32),
+            "done": np.ones((max_episode_len, 1, 1), dtype=np.float32),
+            # "obs": torch.zeros((max_episode_len, 1) + obs_dim),
+            # "act": torch.zeros((max_episode_len, 1) + act_dim),
+            # "rwd": torch.zeros(max_episode_len, 1, 1),
+            # "done": torch.zeros(max_episode_len, 1, 1),
+        }
+        # self.obs = torch.zeros(max_episode_len, max_episodes, obs_dim)
+        # self.act = torch.zeros(max_episode_len, max_episodes, act_dim)
+        # self.rwd = torch.zeros(max_episode_len, max_episodes, 1)
+        # self.done = torch.zeros(max_episode_len, max_episodes, 1)
+        # self.current_start = self.ptr
+        # self.current_episode = []
+        # self.episodes = [None] * max_size
+        self.filled_size = 0
+        self.full = False
+
+    def store(self, obs, act, rwd, obs_next, done):
+        """Add latest step variables to current trajectory. If done, add trajectory
+        to buffer and reset. Loop pointer back to 0 when buffer is full."""
+        self.current_episode["obs"][self.ptr_turn, 0, :] = obs
+        self.current_episode["act"][self.ptr_turn, 0, :] = act
+        self.current_episode["rwd"][self.ptr_turn, 0, :] = rwd
+        self.current_episode["done"][self.ptr_turn, 0, :] = done
+        self.ptr_turn += 1
+
+        if done == 1:
+            for v in self.data:
+                self.data[v][:, self.ptr_ep, :] = self.current_episode[v][:, 0, :]
+            self.ptr_ep += 1
+            self.ptr_turn = 0
+            if not self.full:
+                self.filled_size += 1
+            if self.ptr_ep == self.max_episodes:
+                self.ptr_ep = 0
+                self.full = True
+
+    def sample_episodes(self, sample_size=100):
+        sample_indexes = np.random.randint(0, self.filled_size, sample_size)
+        samples = {v: torch.as_tensor(self.data[v][:, sample_indexes, :]) for v in self.data}
+        samples['obs_next'] = samples['obs'][1:, :, :]
+        samples['obs_next'] = pad(samples['obs_next'],  (0, 0, 0, 0, 0, 1), "constant", 0)
+        return samples
+
+    def clear_current_episode(self):
+        self.current_episode = {
+            "obs": np.zeros_like(self.current_episode["obs"], dtype=np.float32),
+            "act": np.zeros_like(self.current_episode["act"], dtype=np.float32),
+            "rwd": np.zeros_like(self.current_episode["rwd"], dtype=np.float32),
+            "done": np.ones_like(self.current_episode["done"], dtype=np.float32),
+            # "obs": torch.zeros((self.max_episode_len, 1) + self.obs_dim),
+            # "act": torch.zeros((self.max_episode_len, 1) + self.act_dim),
+            # "rwd": torch.zeros(self.max_episode_len, 1, 1),
+            # "done": torch.zeros(self.max_episode_len, 1, 1),
+        }
 
 
 # For off-policy methods

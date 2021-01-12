@@ -46,10 +46,10 @@ class OneHot(gym.Space):
 class ConstantDualUltimatum(gym.Env):
     """A single-agent environment consisting of a 'dual ultimatum' game against a constant bot"""
 
-    def __init__(self, reward="ultimatum", opponent_offer=0.5, opponent_threshold=0.5):
+    def __init__(self, reward="ultimatum", opponent_offer=0.5, opponent_demand=0.5):
         super(ConstantDualUltimatum, self).__init__()
         self.opponent_offer = opponent_offer
-        self.opponent_threshold = opponent_threshold
+        self.opponent_demand = opponent_demand
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32)
         self.observation_space = spaces.Tuple(
             (
@@ -67,10 +67,10 @@ class ConstantDualUltimatum(gym.Env):
             self.rewards = self._ultimatum_rewards
 
     def _ultimatum_rewards(self, action):
-        offer, threshold = action
+        offer, demand = action
         if (
-            offer + EPS >= self.opponent_threshold
-            and self.opponent_offer + EPS >= threshold
+            offer + EPS >= self.opponent_demand
+            and self.opponent_offer + EPS >= demand
         ):
             reward = (1 - offer) + self.opponent_offer
         else:
@@ -156,10 +156,10 @@ class DualUltimatum(gym.Env):
             self.rewards = self._ultimatum_rewards
 
     def _ultimatum_rewards(self, actions):
-        offer_0, threshold_0 = actions[0, :]
-        offer_1, threshold_1 = actions[1, :]
+        offer_0, demand_0 = actions[0, :]
+        offer_1, demand_1 = actions[1, :]
 
-        if offer_0 + EPS >= threshold_1 and offer_1 + EPS >= threshold_0:
+        if offer_0 + EPS >= demand_1 and offer_1 + EPS >= demand_0:
             reward_0 = (1 - offer_0) + offer_1
             reward_1 = offer_0 + (1 - offer_1)
             rewards = np.array([reward_0, reward_1])
@@ -509,7 +509,7 @@ class MimicObs(gym.Env):
         )
         self.ep_len = ep_len
         self.current_turn = 0
-        self.running_sum = 0
+        self.running_sum = np.zeros(1)
         self.target = target
         self.goal_constant = goal_constant
         self.goal_mean = goal_mean
@@ -534,7 +534,7 @@ class MimicObs(gym.Env):
         if self.current_turn == (self.ep_len - 1):
             done = 1
             self.current_turn = 0
-            self.running_sum = 0
+            self.running_sum = np.zeros(1)
         else:
             done = 0
             self.current_turn += 1

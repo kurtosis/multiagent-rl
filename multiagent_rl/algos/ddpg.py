@@ -181,14 +181,18 @@ def ddpg(
                 episode_length = 0
 
             if t_total >= update_after and (t + 1) % update_every == 0:
-                # update_start = time.time()
+                update_start = time.time()
                 for _ in range(update_every):
                     update()
                     # q_time, pi_time, target_time = update(q_time, pi_time, target_time)
                     # n_updates += 1
-                # update_end = time.time()
-                # update_time += (update_end - update_start)
-                # print(f'update time {update_end - update_start}')
+                update_end = time.time()
+                update_time += (update_end - update_start)
+                total_time = update_end - start_time
+                print(f't total {t_total}; t {t}; epoch {epoch}')
+                print(f'update time {update_time}')
+                print(f'total time {total_time}')
+                print('---')
 
             t_total += 1
 

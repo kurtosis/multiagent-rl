@@ -141,9 +141,9 @@ class LSTMDeterministicActor(nn.Module):
         else:
             return action_out, (h, c)
 
-    def reset_state(self, batch_size=1):
-        self.h = torch.zeros((1, batch_size, self.hidden_size))
-        self.c = torch.zeros((1, batch_size, self.hidden_size))
+    def reset_state(self):
+        self.h = torch.zeros_like(self.h)
+        self.c = torch.zeros_like(self.c)
 
 
 class LSTMEstimator(nn.Module):
@@ -192,9 +192,9 @@ class LSTMEstimator(nn.Module):
         else:
             return value, (h, c)
 
-    def reset_state(self, batch_size=1):
-        self.h = torch.zeros((1, batch_size, self.hidden_size))
-        self.c = torch.zeros((1, batch_size, self.hidden_size))
+    def reset_state(self):
+        self.h = torch.zeros_like(self.h)
+        self.c = torch.zeros_like(self.c)
 
 
 class LSTMJoinedActorCritic(nn.Module):
@@ -449,8 +449,11 @@ class DDPGAgent(nn.Module):
         self.update_target()
         # Record things
         if logger is not None:
-            logger.store(LossQ=q_loss.item(), LossPi=pi_loss.item(), **q_loss_info)
+            logger.store(**q_loss_info)
         return pi_loss, q_loss, q_loss_info
+
+    def reset_state(self):
+        pass
 
 
 class TD3Agent(nn.Module):
@@ -572,7 +575,7 @@ class RDPGAgent(nn.Module):
         q_lr=1e-3,
         polyak=0.995,
         gamma=0.99,
-        q_fn = 'LSTMEstimator',
+        q_fn="LSTMEstimator",
         **kwargs
     ):
         super().__init__()
@@ -596,7 +599,7 @@ class RDPGAgent(nn.Module):
         )
 
         # This is a quick hack to test RDPG with a non-LSTM Q function
-        if q_fn == 'ContinuousEstimator':
+        if q_fn == "ContinuousEstimator":
             hidden_layers_q = (64, 64)
             activation = nn.ReLU
             layer_sizes_q = [obs_dim + self.act_dim] + list(hidden_layers_q) + [1]
@@ -609,7 +612,6 @@ class RDPGAgent(nn.Module):
                 hidden_size=hidden_size,
                 action_size=self.act_dim,
             )
-
 
         self.pi_optimizer = Adam(self.pi.parameters(), lr=pi_lr)
         self.q_optimizer = Adam(self.q.parameters(), lr=q_lr)
@@ -679,5 +681,9 @@ class RDPGAgent(nn.Module):
         self.update_target()
         # Record things
         if logger is not None:
-            logger.store(LossQ=q_loss.item(), LossPi=pi_loss.item(), **q_loss_info)
+            logger.store(**q_loss_info)
         return pi_loss, q_loss, q_loss_info
+
+    def reset_state(self):
+        self.pi.reset_state()
+        self.q.reset_state()

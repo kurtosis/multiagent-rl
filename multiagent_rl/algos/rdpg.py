@@ -16,7 +16,7 @@ def rdpg(
     update_every=50,
     test_episodes=10,
     log_interval=10,
-    max_episode_len=1000,
+    max_episode_len=3,
     gamma=0.99,
     polyak=0.995,
     pi_lr=1e-3,
@@ -54,7 +54,9 @@ def rdpg(
         f"\nNumber of parameters \t policy: {var_counts[0]} q: {var_counts[1]}\n"
     )
 
-    buf = RDPGBuffer(max_buffer_len)
+    # buf = RDPGBuffer(max_buffer_len)
+    buf = FastRDPGBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
+    # fast_buf = FastRDPGBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
     pi_optimizer = Adam(agent.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(agent.q.parameters(), lr=q_lr)
 
@@ -64,18 +66,17 @@ def rdpg(
     def compute_loss_policy(data):
         # get data
         o = data["obs"]
-        # o = np.array([[x["obs"] for x in ep] for ep in data])
         # Get actions that agent policy would take at each step
         a = agent.pi(o)
         return -agent.q(torch.cat((o, a), dim=-1)).mean()
 
     def compute_q_target(data):
-        r, o_next, d = data["reward"], data["obs_next"], data["done"]
+        r, o_next, d = data["rwd"], data["obs_next"], data["done"]
         batch_size = r.shape[1]
         with torch.no_grad():
+            a_next = agent_target.pi(o_next)
             # TESTING HACK - force a_next to known best action (0.5)
-            # a_next = agent_target.pi(o_next)
-            a_next = 0.5 * torch.ones_like(o_next)
+            # a_next = 0.5 * torch.ones_like(o_next)
 
             q_target = agent_target.q(torch.cat((o_next, a_next), dim=-1))
             # reshape so that this will work with DDPG agent (for testing)
@@ -92,25 +93,29 @@ def rdpg(
         q = q.reshape_as(q_target)
         return ((q - q_target) ** 2).mean(), q_loss_info
 
-    # q_time = 0.0
-    # pi_time = 0.0
-    # target_time = 0.0
-    # batch_time = 0.0
+    data_time = 0.0
+    q_time = 0.0
+    pi_time = 0.0
+    target_time = 0.0
+    batch_time = 0.0
 
-    # def update(q_time, pi_time, target_time):
-    def update():
+    def update(data_time, q_time, pi_time, target_time):
+    # def update():
         # Get training data from buffer
+        t0_data = time.time()
         data = buf.sample_episodes(sample_size=sample_size)
+        t1_data = time.time()
+        data_time += (t1_data-t0_data)
 
-        # Update Q function
-        # t0 = time.time()
+    # Update Q function
+        t0 = time.time()
         q_optimizer.zero_grad()
         q_target = compute_q_target(data)
         q_loss, q_loss_info = compute_loss_q(data, q_target)
         q_loss.backward()
         q_optimizer.step()
-        # t1 = time.time()
-        # q_time += (t1-t0)
+        t1 = time.time()
+        q_time += (t1-t0)
 
         # Freeze Q params during policy update to save time
         for p in agent.q.parameters():
@@ -123,23 +128,23 @@ def rdpg(
         # Unfreeze Q params after policy update
         for p in agent.q.parameters():
             p.requires_grad = True
-        # t2 = time.time()
-        # pi_time += (t2-t1)
+        t2 = time.time()
+        pi_time += (t2-t1)
 
         with torch.no_grad():
-            # Use in place method from Spinning Up, faster than creating a new state_dict
             for p, p_target in zip(agent.parameters(), agent_target.parameters()):
                 p_target.data.mul_(polyak)
                 p_target.data.add_((1 - polyak) * p.data)
-        # t3 = time.time()
-        # target_time += (t3-t2)
+        t3 = time.time()
+        target_time += (t3-t2)
 
         logger.store(LossPi=pi_loss.item(), LossQ=q_loss.item(), **q_loss_info)
-        # return q_time, pi_time, target_time
+        return data_time, q_time, pi_time, target_time
 
     def deterministic_policy_test():
         for _ in range(test_episodes):
             o = test_env.reset()
+            agent.reset_state()
             ep_ret = 0
             ep_len = 0
             d = False
@@ -158,9 +163,12 @@ def rdpg(
     update_time = 0.0
     for epoch in range(epochs):
         obs = env.reset()
+        agent.reset_state()
         buf.clear_current_episode()
+        # fast_buf.clear_current_episode()
         episode_return = 0
         episode_length = 0
+        pass
         for t in range(steps_per_epoch):
             # Take random actions for first n steps to do broad exploration
             if t_total < start_steps:
@@ -175,6 +183,7 @@ def rdpg(
 
             # Store current step in buffer
             buf.store(obs, act, reward, obs_next, np.array([done]))
+            # fast_buf.store(obs, act, reward, obs_next, np.array([done]))
 
             # update episode return and env state
             obs = obs_next
@@ -188,18 +197,29 @@ def rdpg(
                 if done or episode_capped:
                     logger.store(EpRet=episode_return, EpLen=episode_length)
                 obs = env.reset()
+                agent.reset_state()
                 episode_return = 0
                 episode_length = 0
 
             if t_total >= update_after and (t + 1) % update_every == 0:
-                # update_start = time.time()
+                update_start = time.time()
+                if epoch % 3 == 0:
+                    pass
                 for _ in range(update_every):
-                    update()
-                    # q_time, pi_time, target_time = update(q_time, pi_time, target_time)
+                    # update()
+                    data_time, q_time, pi_time, target_time = update(data_time, q_time, pi_time, target_time)
                     # n_updates += 1
-                # update_end = time.time()
-                # update_time += (update_end - update_start)
-                # print(f'update time {update_end - update_start}')
+                update_end = time.time()
+                update_time += (update_end - update_start)
+                total_time = update_end - start_time
+                # print(f't_total {t_total}; t {t}; epoch {epoch}')
+                # print(f'update_time {update_time}')
+                # print(f'data_time {data_time}')
+                # print(f'q_time {q_time}')
+                # print(f'pi_time {pi_time}')
+                # print(f'target_time {target_time}')
+                # print(f'total time {total_time}')
+                # print('---')
 
             t_total += 1
 
@@ -210,12 +230,12 @@ def rdpg(
 
         # Log info about epoch
         logger.log_tabular("Epoch", epoch)
-        logger.log_tabular("EpRet", with_min_and_max=True)
+        # logger.log_tabular("EpRet", with_min_and_max=True)
         logger.log_tabular("TestEpRet", with_min_and_max=True)
-        logger.log_tabular("EpLen", average_only=True)
-        logger.log_tabular("TestEpLen", average_only=True)
-        logger.log_tabular("TotalEnvInteracts", (epoch + 1) * steps_per_epoch)
-        logger.log_tabular("QVals", with_min_and_max=True)
+        # logger.log_tabular("EpLen", average_only=True)
+        # logger.log_tabular("TestEpLen", average_only=True)
+        # logger.log_tabular("TotalEnvInteracts", (epoch + 1) * steps_per_epoch)
+        # logger.log_tabular("QVals", with_min_and_max=True)
         logger.log_tabular("LossPi", average_only=True)
         logger.log_tabular("LossQ", average_only=True)
         logger.log_tabular("Time", time.time() - start_time)

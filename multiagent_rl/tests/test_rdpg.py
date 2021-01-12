@@ -91,7 +91,7 @@ def train_LSTMEstimator(
         p3d = (0, 0, 0, 0, 0, 1)
 
         def best_action(obs, obs_next):
-            cums = torch.cumsum(obs, 0) / torch.range(1, ep_len).view(ep_len, 1, 1)
+            cums = torch.cumsum(obs, 0) / torch.arange(1, ep_len+1).view(ep_len, 1, 1)
             cums = cums[1:, :, :]
             return pad(cums, p3d, "constant", 0)
 
@@ -268,3 +268,31 @@ def test_actor_mean_target():
     pi_loss = train_LSTMDeterministicActor(pi_lr=1e-2, num_ep=2000, goal_mean=True)
     print(f"Final pi loss, mean obs target: {pi_loss}")
     assert pi_loss < 0.01
+
+
+rets = []
+lens = []
+for _ in range(test_episodes):
+    print('#########NEW EP#######')
+    o = test_env.reset()
+    agent.pi.reset_state()
+    ep_ret = 0
+    ep_len = 0
+    d = False
+    while not d and not ep_len == max_episode_len:
+        with torch.no_grad():
+            a = agent.act(torch.as_tensor(o, dtype=torch.float32), noise=False)
+        print(o)
+        print(a)
+        o, r, d, _ = test_env.step(a)
+        print(test_env.running_sum/(ep_len+1))
+        print(a - test_env.running_sum/(ep_len+1))
+        print(r)
+        print('----')
+        ep_ret += r
+        ep_len += 1
+    rets.append(ep_ret)
+    lens.append(ep_len)
+rets = np.array(rets)
+print(np.mean(rets))
+print(np.std(rets))
