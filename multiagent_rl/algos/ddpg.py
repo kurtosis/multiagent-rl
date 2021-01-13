@@ -3,13 +3,18 @@ from multiagent_rl.algos.training import count_vars
 from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.algos.buffers import *
 
+
 def ddpg(
     env_fn,
     agent_fn=DDPGAgent,
     seed=0,
-    epochs=100,
     steps_per_epoch=4000,
+    epochs=100,
     replay_size=1000000,
+    gamma=0.99,
+    polyak=0.995,
+    pi_lr=1e-3,
+    q_lr=1e-3,
     sample_size=100,
     start_steps=10000,
     update_after=1000,
@@ -17,14 +22,10 @@ def ddpg(
     test_episodes=10,
     log_interval=10,
     max_episode_len=1000,
-    gamma=0.99,
-    polyak=0.995,
-    pi_lr=1e-3,
-    q_lr=1e-3,
     agent_kwargs=dict(),
     env_kwargs=dict(),
     logger_kwargs=dict(),
-    save_freq=10,
+    save_freq=1,
 ):
     """Run DDPG training."""
     # Initialize environment, agent, auxiliary objects
@@ -72,8 +73,11 @@ def ddpg(
         r, o_next, d = data["reward"], data["obs_next"], data["done"]
         with torch.no_grad():
             a_next = agent_target.pi(o_next)
+            # a_next[:,0] = 0.5001
+            # a_next[:,1] = 0.4999
             q_target = agent_target.q(torch.cat((o_next, a_next), dim=-1))
             q_target = r + gamma * (1 - d) * q_target
+            # q_target = r
         return q_target
 
     def compute_loss_q(data, q_target):
@@ -152,7 +156,7 @@ def ddpg(
         episode_length = 0
         for t in range(steps_per_epoch):
             # Take random actions for first n steps to do broad exploration
-            if t_total < start_steps:
+            if t_total <= start_steps:
                 act = env.action_space.sample()
             else:
                 act = agent.act(torch.as_tensor(obs, dtype=torch.float32), noise=True)
@@ -187,12 +191,12 @@ def ddpg(
                     # q_time, pi_time, target_time = update(q_time, pi_time, target_time)
                     # n_updates += 1
                 update_end = time.time()
-                update_time += (update_end - update_start)
+                update_time += update_end - update_start
                 total_time = update_end - start_time
-                print(f't total {t_total}; t {t}; epoch {epoch}')
-                print(f'update time {update_time}')
-                print(f'total time {total_time}')
-                print('---')
+                # print(f't total {t_total}; t {t}; epoch {epoch}')
+                # print(f'update time {update_time}')
+                # print(f'total time {total_time}')
+                # print('---')
 
             t_total += 1
 

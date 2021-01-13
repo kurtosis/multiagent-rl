@@ -46,7 +46,7 @@ class OneHot(gym.Space):
 class ConstantDualUltimatum(gym.Env):
     """A single-agent environment consisting of a 'dual ultimatum' game against a constant bot"""
 
-    def __init__(self, ep_len=10, reward="ultimatum", opponent_offer=None, opponent_demand=None, fixed=False):
+    def __init__(self, ep_len=10, reward="ultimatum", opponent_offer=0.5, opponent_demand=0.5, fixed=True):
         super(ConstantDualUltimatum, self).__init__()
         self.fixed = fixed
         if opponent_offer is None:
@@ -85,8 +85,8 @@ class ConstantDualUltimatum(gym.Env):
             offer + EPS >= self.opponent_demand
             and self.opponent_offer + EPS >= demand
         ):
-            # reward = (1 - offer) + self.opponent_offer
-            reward = 1-offer
+            reward = (1 - offer) + self.opponent_offer
+            # reward = 1-offer
         else:
             reward = 0
         return reward
@@ -94,22 +94,19 @@ class ConstantDualUltimatum(gym.Env):
     def _l1_reward(self, action):
         """Simple reward for testing"""
         offer_0, _ = action
-        l1 = -np.abs(offer_0 - self.opponent_demand)
-        reward = np.array([l1, l1])
+        reward = -np.abs(offer_0 - self.opponent_demand)
         return reward
 
     def _l2_reward(self, action):
         """Simple reward for testing"""
         offer_0, _ = action[0, :]
-        l2 = -((offer_0 - self.opponent_demand) ** 2)
-        reward = np.array([l2, l2])
+        reward = -((offer_0 - self.opponent_demand) ** 2)
         return reward
 
     def _l1_const_reward(self, action, target=0.3):
         """Simple reward for testing"""
         offer_0, _ = action[0, :]
-        r_0 = -np.abs(offer_0 - target)
-        reward = r_0
+        reward = -np.abs(offer_0 - target)
         return reward
 
     def step(self, action):
