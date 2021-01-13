@@ -63,7 +63,7 @@ class TrajectoryBuffer:
         """
         We've logged most variables at each step in episode.
         There are two vars that can only be computed at end
-        of episode (b/c they depend on future rewards):
+        of episode (b/c they depend on future reward):
         - Advantage (for GAE)
         - Return (using reward-to-go)
         Compute both of those here and save to buffer.
@@ -71,14 +71,14 @@ class TrajectoryBuffer:
         """
         # note location of current episode in buffer
         path_slice = slice(self.path_start, self.ptr)
-        # get rewards and values of current episode, append the last step value
+        # get reward and values of current episode, append the last step value
         rewards = np.append(self.reward[path_slice], last_v)
         values = np.append(self.v[path_slice], last_v)
         # compute advantage fn A(s_t,a_t) for each step in episode using GAE
         # write this to the buffer in the location of this episode
         deltas = rewards[:-1] + self.gamma * values[1:] - values[:-1]
         self.adv[path_slice] = discount_cumsum(deltas, self.gamma * self.lamb)
-        # compute rewards to go
+        # compute reward to go
         self.ret[path_slice] = discount_cumsum(rewards, self.gamma)[:-1]
         # Update start index for next episode
         self.path_start = self.ptr
@@ -110,7 +110,7 @@ class TrajectoryBuffer:
         return data
 
 
-class RDPGBuffer:
+class OldRDPGBuffer:
     """
     Stores completed episodes for use in RDPG with recurrent networks. Buffer is a list
     of (complete) episodes. Once buffer is full, older episodes are overwritten.
@@ -118,7 +118,6 @@ class RDPGBuffer:
 
     def __init__(self, max_size):
         self.ptr = 0
-        # self.path_start = 0
         self.max_size = max_size
         self.current_start = self.ptr
         self.current_episode = []
@@ -172,10 +171,10 @@ class RDPGBuffer:
         self.current_episode = []
 
 
-class FastRDPGBuffer:
+class RDPGBuffer:
     """
-    Stores completed episodes for use in RDPG with recurrent networks. Buffer is a list
-    of (complete) episodes. Once buffer is full, older episodes are overwritten.
+    Stores completed episodes for use in RDPG with recurrent networks. Each variable
+    is stored as a tensor for fast sampling. Once buffer is full, older episodes are overwritten.
     """
 
     def __init__(self, obs_dim, act_dim, max_episode_len, max_episodes):
@@ -185,33 +184,26 @@ class FastRDPGBuffer:
         self.max_episodes = max_episodes
         self.ptr_turn = 0
         self.ptr_ep = 0
-        # self.path_start = 0
         self.data = {
-            "obs": np.zeros(merge_shape((max_episode_len, max_episodes), obs_dim), dtype=np.float32),
-            "act": np.zeros(merge_shape((max_episode_len, max_episodes), act_dim), dtype=np.float32),
+            "obs": np.zeros(
+                merge_shape((max_episode_len, max_episodes), obs_dim), dtype=np.float32
+            ),
+            "act": np.zeros(
+                merge_shape((max_episode_len, max_episodes), act_dim), dtype=np.float32
+            ),
             "rwd": np.zeros((max_episode_len, max_episodes, 1), dtype=np.float32),
             "done": np.ones((max_episode_len, max_episodes, 1), dtype=np.float32),
-            # "act": torch.zeros((max_episode_len, max_episodes) + act_dim),
-            # "rwd": torch.zeros(max_episode_len, max_episodes, 1),
-            # "done": torch.zeros(max_episode_len, max_episodes, 1),
         }
         self.current_episode = {
-            "obs": np.zeros(merge_shape((max_episode_len, 1), obs_dim), dtype=np.float32),
-            "act": np.zeros(merge_shape((max_episode_len, 1), act_dim), dtype=np.float32),
+            "obs": np.zeros(
+                merge_shape((max_episode_len, 1), obs_dim), dtype=np.float32
+            ),
+            "act": np.zeros(
+                merge_shape((max_episode_len, 1), act_dim), dtype=np.float32
+            ),
             "rwd": np.zeros((max_episode_len, 1, 1), dtype=np.float32),
             "done": np.ones((max_episode_len, 1, 1), dtype=np.float32),
-            # "obs": torch.zeros((max_episode_len, 1) + obs_dim),
-            # "act": torch.zeros((max_episode_len, 1) + act_dim),
-            # "rwd": torch.zeros(max_episode_len, 1, 1),
-            # "done": torch.zeros(max_episode_len, 1, 1),
         }
-        # self.obs = torch.zeros(max_episode_len, max_episodes, obs_dim)
-        # self.act = torch.zeros(max_episode_len, max_episodes, act_dim)
-        # self.rwd = torch.zeros(max_episode_len, max_episodes, 1)
-        # self.done = torch.zeros(max_episode_len, max_episodes, 1)
-        # self.current_start = self.ptr
-        # self.current_episode = []
-        # self.episodes = [None] * max_size
         self.filled_size = 0
         self.full = False
 
@@ -237,9 +229,13 @@ class FastRDPGBuffer:
 
     def sample_episodes(self, sample_size=100):
         sample_indexes = np.random.randint(0, self.filled_size, sample_size)
-        samples = {v: torch.as_tensor(self.data[v][:, sample_indexes, :]) for v in self.data}
-        samples['obs_next'] = samples['obs'][1:, :, :]
-        samples['obs_next'] = pad(samples['obs_next'],  (0, 0, 0, 0, 0, 1), "constant", 0)
+        samples = {
+            v: torch.as_tensor(self.data[v][:, sample_indexes, :]) for v in self.data
+        }
+        samples["obs_next"] = samples["obs"][1:, :, :]
+        samples["obs_next"] = pad(
+            samples["obs_next"], (0, 0, 0, 0, 0, 1), "constant", 0
+        )
         return samples
 
     def clear_current_episode(self):
@@ -248,10 +244,6 @@ class FastRDPGBuffer:
             "act": np.zeros_like(self.current_episode["act"], dtype=np.float32),
             "rwd": np.zeros_like(self.current_episode["rwd"], dtype=np.float32),
             "done": np.ones_like(self.current_episode["done"], dtype=np.float32),
-            # "obs": torch.zeros((self.max_episode_len, 1) + self.obs_dim),
-            # "act": torch.zeros((self.max_episode_len, 1) + self.act_dim),
-            # "rwd": torch.zeros(self.max_episode_len, 1, 1),
-            # "done": torch.zeros(self.max_episode_len, 1, 1),
         }
 
 

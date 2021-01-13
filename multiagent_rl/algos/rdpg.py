@@ -35,8 +35,16 @@ def rdpg(
     torch.manual_seed(seed)
     np.random.seed(seed)
 
+
+    data_time = 0.0
+    q_time = 0.0
+    pi_time = 0.0
+    target_time = 0.0
+    batch_time = 0.0
+
     env = env_fn(**env_kwargs)
-    test_env = env_fn(**env_kwargs)
+    test_env = deepcopy(env)
+    # test_env = env_fn(**env_kwargs)
     # env.seed(seed)
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape
@@ -55,8 +63,7 @@ def rdpg(
     )
 
     # buf = RDPGBuffer(max_buffer_len)
-    buf = FastRDPGBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
-    # fast_buf = FastRDPGBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
+    buf = RDPGBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
     pi_optimizer = Adam(agent.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(agent.q.parameters(), lr=q_lr)
 
@@ -72,13 +79,20 @@ def rdpg(
 
     def compute_q_target(data):
         r, o_next, d = data["rwd"], data["obs_next"], data["done"]
-        batch_size = r.shape[1]
+        o = data['obs']
         with torch.no_grad():
-            a_next = agent_target.pi(o_next)
-            # TESTING HACK - force a_next to known best action (0.5)
-            # a_next = 0.5 * torch.ones_like(o_next)
+            o_padded = pad(o, (0, 0, 0, 0, 0, 1), "constant", 0)
+            a_padded = agent_target.pi(o_padded)
+            q_target_padded = agent_target.q(torch.cat((o_padded, a_padded), dim=-1))
 
-            q_target = agent_target.q(torch.cat((o_next, a_next), dim=-1))
+            # HACK - probably a way to do this in one line with slice?
+            if len(q_target_padded.shape)==3:
+                q_target = q_target_padded[1:, :, :]
+            elif len(q_target_padded.shape)==2:
+                q_target = q_target_padded[1:, :]
+            else:
+                raise ValueError('Q tensor has unexpected number of dimensions!')
+
             # reshape so that this will work with DDPG agent (for testing)
             q_target = q_target.reshape_as(d)
             q_target = r + gamma * (1 - d) * q_target
@@ -93,19 +107,13 @@ def rdpg(
         q = q.reshape_as(q_target)
         return ((q - q_target) ** 2).mean(), q_loss_info
 
-    data_time = 0.0
-    q_time = 0.0
-    pi_time = 0.0
-    target_time = 0.0
-    batch_time = 0.0
-
-    def update(data_time, q_time, pi_time, target_time):
-    # def update():
+    # def update(data_time, q_time, pi_time, target_time):
+    def update():
         # Get training data from buffer
         t0_data = time.time()
         data = buf.sample_episodes(sample_size=sample_size)
         t1_data = time.time()
-        data_time += (t1_data-t0_data)
+        # data_time += (t1_data-t0_data)
 
     # Update Q function
         t0 = time.time()
@@ -115,7 +123,7 @@ def rdpg(
         q_loss.backward()
         q_optimizer.step()
         t1 = time.time()
-        q_time += (t1-t0)
+        # q_time += (t1-t0)
 
         # Freeze Q params during policy update to save time
         for p in agent.q.parameters():
@@ -129,14 +137,14 @@ def rdpg(
         for p in agent.q.parameters():
             p.requires_grad = True
         t2 = time.time()
-        pi_time += (t2-t1)
+        # pi_time += (t2-t1)
 
         with torch.no_grad():
             for p, p_target in zip(agent.parameters(), agent_target.parameters()):
                 p_target.data.mul_(polyak)
                 p_target.data.add_((1 - polyak) * p.data)
         t3 = time.time()
-        target_time += (t3-t2)
+        # target_time += (t3-t2)
 
         logger.store(LossPi=pi_loss.item(), LossQ=q_loss.item(), **q_loss_info)
         return data_time, q_time, pi_time, target_time
@@ -165,7 +173,6 @@ def rdpg(
         obs = env.reset()
         agent.reset_state()
         buf.clear_current_episode()
-        # fast_buf.clear_current_episode()
         episode_return = 0
         episode_length = 0
         pass
@@ -183,7 +190,6 @@ def rdpg(
 
             # Store current step in buffer
             buf.store(obs, act, reward, obs_next, np.array([done]))
-            # fast_buf.store(obs, act, reward, obs_next, np.array([done]))
 
             # update episode return and env state
             obs = obs_next
@@ -206,12 +212,12 @@ def rdpg(
                 if epoch % 3 == 0:
                     pass
                 for _ in range(update_every):
-                    # update()
-                    data_time, q_time, pi_time, target_time = update(data_time, q_time, pi_time, target_time)
+                    update()
+                    # data_time, q_time, pi_time, target_time = update(data_time, q_time, pi_time, target_time)
                     # n_updates += 1
-                update_end = time.time()
-                update_time += (update_end - update_start)
-                total_time = update_end - start_time
+                # update_end = time.time()
+                # update_time += (update_end - update_start)
+                # total_time = update_end - start_time
                 # print(f't_total {t_total}; t {t}; epoch {epoch}')
                 # print(f'update_time {update_time}')
                 # print(f'data_time {data_time}')

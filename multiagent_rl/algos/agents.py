@@ -130,8 +130,9 @@ class LSTMDeterministicActor(nn.Module):
             c = torch.zeros((1, batch_size, self.hidden_size))
             lstm_out, (h, c) = self.lstm(input, (h, c))
         else:
+            # TO DO: what should the input dims be exactly? Are there edge cases?
             lstm_out, (h, c) = self.lstm(
-                input.view(len(input), 1, -1), (self.h, self.c)
+                input.view(-1, 1, len(input)), (self.h, self.c)
             )
             self.h, self.c = h, c
         x = self.action_mlp(lstm_out)
