@@ -2,9 +2,11 @@ from multiagent_rl.algos.agents import *
 from multiagent_rl.algos.training import count_vars
 from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.algos.buffers import *
+from multiagent_rl.algos.orig_ddpg.ddpg import ReplayBuffer
+from multiagent_rl.utils.evals import *
 
 
-def ddpg(
+def ddpg_new(
     env_fn,
     agent_fn=DDPGAgent,
     seed=0,
@@ -15,11 +17,11 @@ def ddpg(
     polyak=0.995,
     pi_lr=1e-3,
     q_lr=1e-3,
-    sample_size=100,
+    batch_size=100,
     start_steps=10000,
     update_after=1000,
     update_every=50,
-    test_episodes=10,
+    num_test_episodes=10,
     log_interval=10,
     max_episode_len=1000,
     agent_kwargs=dict(),
@@ -38,7 +40,12 @@ def ddpg(
 
     env = env_fn(**env_kwargs)
     test_env = env_fn(**env_kwargs)
-    # env.seed(seed)
+
+    env.seed(seed)
+    env.action_space.seed(0)
+    test_env.seed(seed)
+    test_env.action_space.seed(0)
+
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape
     agent = agent_fn(
@@ -55,36 +62,47 @@ def ddpg(
         f"\nNumber of parameters \t policy: {var_counts[0]} q: {var_counts[1]}\n"
     )
 
-    buf = TransitionBuffer(obs_dim, act_dim, replay_size)
+    # buf = TransitionBuffer(obs_dim, act_dim, replay_size)
+    buf = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
+
     pi_optimizer = Adam(agent.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(agent.q.parameters(), lr=q_lr)
 
     # Set up model saving
     logger.setup_pytorch_saver(agent)
 
-    def compute_loss_policy(data):
-        # get data
+    def compute_loss_pi(data):
         o = data["obs"]
-        # Get actions that agent policy would take at each step
-        a = agent.pi(o)
-        return -agent.q(torch.cat((o, a), dim=-1)).mean()
+        q_pi = agent.q(torch.cat([o, agent.pi(o)], dim=-1))
+        return -q_pi.mean()
 
-    def compute_q_target(data):
-        r, o_next, d = data["reward"], data["obs_next"], data["done"]
+    # Set up function for computing DDPG Q-loss
+    def compute_loss_q(data):
+        o, a, r, o2, d = (
+            data["obs"],
+            data["act"],
+            data["rew"],
+            data["obs2"],
+            data["done"],
+        )
+
+        # q = ac.q(o, a)
+        q = agent.q(torch.cat([o, a], dim=-1))
+
+        # Bellman backup for Q function
         with torch.no_grad():
-            a_next = agent_target.pi(o_next)
-            # a_next[:,0] = 0.5001
-            # a_next[:,1] = 0.4999
-            q_target = agent_target.q(torch.cat((o_next, a_next), dim=-1))
-            q_target = r + gamma * (1 - d) * q_target
-            # q_target = r
-        return q_target
+            # q_pi_targ = ac_targ.q(o2, ac_targ.pi(o2))
+            a2 = agent_target.pi(o2)
+            q_pi_targ = agent_target.q(torch.cat([o2, a2], dim=-1))
+            backup = r + gamma * (1 - d) * q_pi_targ
 
-    def compute_loss_q(data, q_target):
-        o, a = data["obs"], data["act"]
-        q = agent.q(torch.cat((o, a), dim=-1))
-        q_loss_info = {"QVals": q.detach().numpy()}
-        return ((q - q_target) ** 2).mean(), q_loss_info
+        # MSE loss against Bellman backup
+        loss_q = ((q - backup) ** 2).mean()
+
+        # Useful info for logging
+        loss_info = dict(QVals=q.detach().numpy())
+
+        return loss_q, loss_info
 
     # q_time = 0.0
     # pi_time = 0.0
@@ -94,14 +112,14 @@ def ddpg(
     # def update(q_time, pi_time, target_time):
     def update():
         # Get training data from buffer
-        data = buf.get(sample_size=sample_size)
+        # data = buf.get(batch_size=batch_size)
+        data = buf.sample_batch(batch_size)
 
         # Update Q function
         # t0 = time.time()
         q_optimizer.zero_grad()
-        q_target = compute_q_target(data)
-        q_loss, q_loss_info = compute_loss_q(data, q_target)
-        q_loss.backward()
+        loss_q, loss_info = compute_loss_q(data)
+        loss_q.backward()
         q_optimizer.step()
         # t1 = time.time()
         # q_time += (t1-t0)
@@ -111,35 +129,36 @@ def ddpg(
             p.requires_grad = False
         # Update policy
         pi_optimizer.zero_grad()
-        pi_loss = compute_loss_policy(data)
-        pi_loss.backward()
+        loss_pi = compute_loss_pi(data)
+        loss_pi.backward()
         pi_optimizer.step()
+
         # Unfreeze Q params after policy update
         for p in agent.q.parameters():
             p.requires_grad = True
         # t2 = time.time()
         # pi_time += (t2-t1)
 
+        logger.store(LossQ=loss_q.item(), LossPi=loss_pi.item(), **loss_info)
+
         with torch.no_grad():
-            # Use in place method from Spinning Up, faster than creating a new state_dict
             for p, p_target in zip(agent.parameters(), agent_target.parameters()):
                 p_target.data.mul_(polyak)
                 p_target.data.add_((1 - polyak) * p.data)
         # t3 = time.time()
         # target_time += (t3-t2)
 
-        logger.store(LossPi=pi_loss.item(), LossQ=q_loss.item(), **q_loss_info)
         # return q_time, pi_time, target_time
 
     def deterministic_policy_test():
-        for _ in range(test_episodes):
+        for _ in range(num_test_episodes):
             o = test_env.reset()
             ep_ret = 0
             ep_len = 0
             d = False
             while not d and not ep_len == max_episode_len:
-                with torch.no_grad():
-                    a = agent.act(torch.as_tensor(o, dtype=torch.float32), noise=False)
+                # with torch.no_grad():
+                a = agent.act(torch.as_tensor(o, dtype=torch.float32), noise=False)
                 o, r, d, _ = test_env.step(a)
                 ep_ret += r
                 ep_len += 1
@@ -184,7 +203,7 @@ def ddpg(
                 episode_return = 0
                 episode_length = 0
 
-            if t_total >= update_after and (t + 1) % update_every == 0:
+            if t_total >= update_after and t % update_every == 0:
                 update_start = time.time()
                 for _ in range(update_every):
                     update()
@@ -221,3 +240,8 @@ def ddpg(
         # print(f'q_time {q_time}')
         # print(f'pi_time {pi_time}')
         # print(f'target_time {target_time}')
+
+        # Look at pi, q functions
+        # batch = buf.sample_batch(batch_size)
+        # eval_q_vs_a_2(batch, agent)
+        # eval_a(batch, agent)

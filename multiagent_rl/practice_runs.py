@@ -1,8 +1,7 @@
-# from multiagent_rl.algos.orig_ddpg.core import *
-# import multiagent_rl.algos.orig_ddpg.core as core
+import multiagent_rl.algos.orig_ddpg.core as core
+from multiagent_rl.algos.orig_ddpg.ddpg import *
 from multiagent_rl.algos.ddpg import *
-# from multiagent_rl.algos.orig_ddpg.ddpg import *
-from multiagent_rl.algos.rdpg import *
+# from multiagent_rl.algos.rdpg import *
 from multiagent_rl.environments.tournament_env import *
 
 
@@ -42,39 +41,41 @@ from multiagent_rl.environments.tournament_env import *
 # )
 
 ep_len = 10
-ddpg(
-    epochs=20,
-    steps_per_epoch=600,
-    sample_size=1024,
-    update_every=50,
-    save_freq=1,
-    start_steps=2000,
-    update_after=10,
-    agent_fn=DDPGAgent,
-    # agent_fn=core.MLPActorCritic,
-    pi_lr=2e-3,
-    q_lr=2e-3,
-    max_episode_len=ep_len,
-    agent_kwargs={"hidden_layers_mu": (256, 256), "hidden_layers_q": (256, 256)},
-    env_fn=ConstantDualUltimatum,
-    env_kwargs={
-        "ep_len": ep_len,
-        "fixed": True,
-        "opponent_offer": 0.5,
-        "opponent_demand": 0.5,
-    },
-)
+# ddpg_new(
+#     seed=0,
+#     steps_per_epoch=1000,
+#     epochs=20,
+#     pi_lr = 1e-3,
+#     q_lr = 1e-3,
+#     batch_size=1024,
+#     start_steps=20000,
+#     update_after=949,
+#     update_every=50,
+#     save_freq=1,
+#     agent_fn=DDPGAgent,
+#     # agent_fn=core.MLPActorCritic,
+#     num_test_episodes=10,
+#     max_episode_len=ep_len,
+#     agent_kwargs={"hidden_layers_mu": (256, 256), "hidden_layers_q": (256, 256)},
+#     env_fn=ConstantDualUltimatum,
+#     env_kwargs={
+#         "ep_len": ep_len,
+#         "fixed": True,
+#         "opponent_offer": 0.5,
+#         "opponent_demand": 0.5,
+#     },
+# )
 
 # ddpg(
 #     ConstantDualUltimatum,
 #     seed=0,
-#     steps_per_epoch=600,
+#     steps_per_epoch=1000,
 #     epochs=20,
-#     pi_lr=2e-3,
-#     q_lr=2e-3,
+#     pi_lr=1e-3,
+#     q_lr=1e-3,
 #     batch_size=1024,
-#     start_steps=2000,
-#     update_after=10,
+#     start_steps=20000,
+#     update_after=949,
 #     update_every=50,
 #     act_noise=0.1,
 #     num_test_episodes=10,
@@ -82,3 +83,41 @@ ddpg(
 #     logger_kwargs=dict(),
 #     save_freq=1,
 # )
+
+ddpg_new(
+    ConstantDualUltimatum,
+    seed=0,
+    steps_per_epoch=100,
+    epochs=2,
+    pi_lr=1e-3,
+    q_lr=1e-3,
+    batch_size=64,
+    start_steps=100,
+    update_after=49,
+    update_every=50,
+    num_test_episodes=10,
+    max_episode_len=ep_len,
+    # act_noise=0.1,
+    # max_ep_len=ep_len,
+    logger_kwargs=dict(),
+    save_freq=1,
+)
+
+ddpg(
+    ConstantDualUltimatum,
+    seed=0,
+    steps_per_epoch=100,
+    epochs=2,
+    pi_lr=1e-3,
+    q_lr=1e-3,
+    batch_size=64,
+    start_steps=100,
+    update_after=49,
+    update_every=50,
+    num_test_episodes=10,
+    # max_episode_len=ep_len,
+    act_noise=0.1,
+    max_ep_len=ep_len,
+    logger_kwargs=dict(),
+    save_freq=1,
+)

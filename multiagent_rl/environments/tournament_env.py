@@ -46,7 +46,14 @@ class OneHot(gym.Space):
 class ConstantDualUltimatum(gym.Env):
     """A single-agent environment consisting of a 'dual ultimatum' game against a constant bot"""
 
-    def __init__(self, ep_len=10, reward="ultimatum", opponent_offer=0.5, opponent_demand=0.5, fixed=True):
+    def __init__(
+        self,
+        ep_len=10,
+        reward="ultimatum",
+        opponent_offer=0.5,
+        opponent_demand=0.5,
+        fixed=True,
+    ):
         super(ConstantDualUltimatum, self).__init__()
         self.fixed = fixed
         if opponent_offer is None:
@@ -69,7 +76,7 @@ class ConstantDualUltimatum(gym.Env):
         #     )
         # )
         self.ep_len = ep_len
-        self.current_turn=0
+        self.current_turn = 0
         if reward == "l2":
             self.reward = self._l2_reward
         elif reward == "l1":
@@ -81,14 +88,12 @@ class ConstantDualUltimatum(gym.Env):
 
     def _ultimatum_reward(self, action):
         offer, demand = action
-        if (
-            offer + EPS >= self.opponent_demand
-            and self.opponent_offer + EPS >= demand
-        ):
-            reward = (1 - offer) + self.opponent_offer
-            # reward = 1-offer
+        if offer + EPS >= self.opponent_demand and self.opponent_offer + EPS >= demand:
+            # reward = (1 - offer) + self.opponent_offer
+            reward = 1 - self.opponent_demand - np.abs(offer - self.opponent_demand)
         else:
-            reward = 0
+            reward = 1 - self.opponent_demand - np.abs(offer - self.opponent_demand)
+            # reward = 0
         return reward
 
     def _l1_reward(self, action):
@@ -130,9 +135,7 @@ class ConstantDualUltimatum(gym.Env):
             self.opponent_offer = np.random.rand()
             self.opponent_demand = np.random.rand()
         # Create init state obs, with flag indicating this is the first step
-        obs = np.array(
-            [self.opponent_offer, self.opponent_demand, 0, 0, 1]
-        )
+        obs = np.array([self.opponent_offer, self.opponent_demand, 0, 0, 1])
         return obs
 
     def render(self, mode="human"):
@@ -142,7 +145,9 @@ class ConstantDualUltimatum(gym.Env):
 class StaticDualUltimatum(gym.Env):
     """A single-agent environment consisting of a 'dual ultimatum' game against a StaticDistribBot"""
 
-    def __init__(self, reward="ultimatum", opponent_offer=0.5, opponent_demand=0.5, fixed=False):
+    def __init__(
+        self, reward="ultimatum", opponent_offer=0.5, opponent_demand=0.5, fixed=False
+    ):
         super(StaticDualUltimatum, self).__init__()
         self.fixed = fixed
         self.opponent_offer = opponent_offer
@@ -165,10 +170,7 @@ class StaticDualUltimatum(gym.Env):
 
     def _ultimatum_rewards(self, action):
         offer, demand = action
-        if (
-            offer + EPS >= self.opponent_demand
-            and self.opponent_offer + EPS >= demand
-        ):
+        if offer + EPS >= self.opponent_demand and self.opponent_offer + EPS >= demand:
             reward = (1 - offer) + self.opponent_offer
         else:
             reward = 0
@@ -598,7 +600,9 @@ class RoundRobinTournament(gym.Env):
 class MimicObs(gym.Env):
     """A simple environment for testing in which reward is based on distance to last obs"""
 
-    def __init__(self, ep_len=10, reward="l1", target="last", goal_constant=None, goal_mean=False):
+    def __init__(
+        self, ep_len=10, reward="l1", target="last", goal_constant=None, goal_mean=False
+    ):
         super(MimicObs, self).__init__()
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
         self.observation_space = spaces.Box(
