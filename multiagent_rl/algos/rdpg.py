@@ -10,7 +10,7 @@ def rdpg(
     epochs=100,
     steps_per_epoch=4000,
     max_buffer_len=100000,
-    sample_size=100,
+    batch_size=100,
     start_steps=10000,
     update_after=1000,
     update_every=50,
@@ -49,7 +49,7 @@ def rdpg(
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape
     agent = agent_fn(
-        obs_space=env.observation_space, action_space=env.action_space, **agent_kwargs
+        observation_space=env.observation_space, action_space=env.action_space, **agent_kwargs
     )
     agent_target = deepcopy(agent)
 
@@ -57,7 +57,10 @@ def rdpg(
     for p in agent_target.parameters():
         p.requires_grad = False
 
-    var_counts = tuple(count_vars(module) for module in [agent.pi, agent.q])
+    if hasattr(agent, 'q'):
+        var_counts = tuple(count_vars(module) for module in [agent.pi, agent.q])
+    else:
+        var_counts = tuple(count_vars(module) for module in [agent.pi, agent.q1])
     logger.log(
         f"\nNumber of parameters \t policy: {var_counts[0]} q: {var_counts[1]}\n"
     )
@@ -111,7 +114,7 @@ def rdpg(
     def update():
         # Get training data from buffer
         t0_data = time.time()
-        data = buf.sample_episodes(sample_size=sample_size)
+        data = buf.sample_episodes(batch_size=batch_size)
         t1_data = time.time()
         # data_time += (t1_data-t0_data)
 

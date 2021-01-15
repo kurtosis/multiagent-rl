@@ -5,8 +5,9 @@ import torch
 from torch.optim import Adam
 import gym
 import time
-import spinup.algos.pytorch.td3.core as core
-from spinup.utils.logx import EpochLogger
+import multiagent_rl.algos.orig_td3.core as core
+from multiagent_rl.utils.logx import EpochLogger
+from multiagent_rl.utils.evals import *
 
 
 class ReplayBuffer:
@@ -153,6 +154,12 @@ def td3(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     np.random.seed(seed)
 
     env, test_env = env_fn(), env_fn()
+
+    env.seed(seed)
+    env.action_space.seed(seed)
+    test_env.seed(seed)
+    test_env.action_space.seed(seed)
+
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape[0]
 
@@ -187,6 +194,9 @@ def td3(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         # Bellman backup for Q functions
         with torch.no_grad():
             pi_targ = ac_targ.pi(o2)
+            # HACK for testing
+            # pi_targ[:,0] = 0.9 + 0.0001
+            # pi_targ[:,1] = 0.2
 
             # Target policy smoothing
             epsilon = torch.randn_like(pi_targ) * target_noise
@@ -266,7 +276,10 @@ def td3(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     def get_action(o, noise_scale):
         a = ac.act(torch.as_tensor(o, dtype=torch.float32))
         a += noise_scale * np.random.randn(act_dim)
-        return np.clip(a, -act_limit, act_limit)
+        # return np.clip(a, -act_limit, act_limit)
+        # Hack for testing
+        return np.clip(a, 0, 1)
+
 
     def test_agent():
         for j in range(num_test_episodes):
@@ -302,7 +315,8 @@ def td3(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         # Ignore the "done" signal if it comes from hitting the time
         # horizon (that is, when it's an artificial terminal signal
         # that isn't based on the agent's state)
-        d = False if ep_len==max_ep_len else d
+        # *** HACK: Turn this off for now, we are not using max_ep_len this way
+        # d = False if ep_len==max_ep_len else d
 
         # Store experience to replay buffer
         replay_buffer.store(o, a, r, o2, d)
@@ -332,6 +346,11 @@ def td3(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
             # Test the performance of the deterministic version of the agent.
             test_agent()
+
+            # # # Look at pi, q functions
+            # batch = replay_buffer.sample_batch(batch_size)
+            # eval_q_td3(batch, ac)
+            # eval_a(batch, ac)
 
             # Log info about epoch
             logger.log_tabular('Epoch', epoch)

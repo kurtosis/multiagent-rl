@@ -158,9 +158,9 @@ def ddpg(
     env, test_env = env_fn(), env_fn()
 
     env.seed(seed)
-    env.action_space.seed(0)
+    env.action_space.seed(seed)
     test_env.seed(seed)
-    test_env.action_space.seed(0)
+    test_env.action_space.seed(seed)
 
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape[0]
@@ -259,7 +259,9 @@ def ddpg(
         if noise_scale > 1e-6:
             noise = np.random.randn(act_dim)
             a += noise_scale * noise
-        return np.clip(a, -act_limit, act_limit)
+        # return np.clip(a, -act_limit, act_limit)
+        # Hack for testing
+        return np.clip(a, 0, 1)
 
     def test_agent():
         for j in range(num_test_episodes):
@@ -295,7 +297,8 @@ def ddpg(
         # Ignore the "done" signal if it comes from hitting the time
         # horizon (that is, when it's an artificial terminal signal
         # that isn't based on the agent's state)
-        d = False if ep_len == max_ep_len else d
+        # *** HACK: Turn this off for now, we are not using max_ep_len this way
+        # d = False if ep_len == max_ep_len else d
 
         # Store experience to replay buffer
         replay_buffer.store(o, a, r, o2, d)

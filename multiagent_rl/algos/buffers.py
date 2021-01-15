@@ -276,13 +276,13 @@ class TransitionBuffer:
         if not self.full:
             self.filled_size += 1
 
-    def get(self, sample_size=100):
+    def get(self, batch_size=100):
         """
         Return needed variables (as tensors) over episodes in buffer.
         Reset pointers for next epoch.
         """
         # return needed variables as a dictionary
-        sample_indexes = np.random.randint(0, self.filled_size, sample_size)
+        sample_indexes = np.random.randint(0, self.filled_size, batch_size)
         data = {
             "obs": torch.as_tensor(self.obs[sample_indexes], dtype=torch.float32),
             "act": torch.as_tensor(self.act[sample_indexes], dtype=torch.float32),
@@ -324,13 +324,13 @@ class MultiagentTransitionBuffer:
         if not self.full:
             self.filled_size += 1
 
-    def get(self, sample_size=100):
+    def get(self, batch_size=100):
         """
         Return needed variables (as tensors) over episodes in buffer.
         Reset pointers for next epoch.
         """
         # return needed variables as a dictionary
-        sample_indexes = np.random.randint(0, self.filled_size, sample_size)
+        sample_indexes = np.random.randint(0, self.filled_size, batch_size)
         data = {
             "obs": torch.as_tensor(self.obs[sample_indexes], dtype=torch.float32),
             "act": torch.as_tensor(self.act[sample_indexes], dtype=torch.float32),

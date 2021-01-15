@@ -27,10 +27,15 @@ class MLPActor(nn.Module):
         pi_sizes = [obs_dim] + list(hidden_sizes) + [act_dim]
         self.pi = mlp(pi_sizes, activation, nn.Tanh)
         self.act_limit = act_limit
+        # hack for testing
+        self.low = 0
+        self. width = 1
 
     def forward(self, obs):
         # Return output from network scaled to action space limits.
-        return self.act_limit * self.pi(obs)
+        output = (self.pi(obs) + 1) * self.width / 2 + self.low
+        # return self.act_limit * self.pi(obs)
+        return output
 
 class MLPQFunction(nn.Module):
 

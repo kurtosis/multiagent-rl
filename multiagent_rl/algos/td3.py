@@ -1,14 +1,15 @@
+from itertools import chain
 from multiagent_rl.algos.agents import *
 from multiagent_rl.algos.training import count_vars
 from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.algos.buffers import *
-from multiagent_rl.algos.orig_ddpg.ddpg import ReplayBuffer
+from multiagent_rl.algos.orig_td3.td3 import ReplayBuffer
 from multiagent_rl.utils.evals import *
 
 
-def ddpg_new(
+def td3_new(
     env_fn,
-    agent_fn=DDPGAgent,
+    agent_fn=TD3Agent,
     seed=0,
     steps_per_epoch=4000,
     epochs=100,
@@ -17,6 +18,9 @@ def ddpg_new(
     polyak=0.995,
     pi_lr=1e-3,
     q_lr=1e-3,
+    target_noise=0.2,
+    target_noise_lim=0.5,
+    policy_delay=2,
     batch_size=100,
     start_steps=10000,
     update_after=1000,
@@ -29,7 +33,7 @@ def ddpg_new(
     logger_kwargs=dict(),
     save_freq=1,
 ):
-    """Run DDPG training."""
+    """Run td3 training."""
     # Initialize environment, agent, auxiliary objects
 
     logger = EpochLogger(**logger_kwargs)
@@ -49,15 +53,17 @@ def ddpg_new(
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape
     agent = agent_fn(
-        obs_space=env.observation_space, action_space=env.action_space, **agent_kwargs
+        observation_space=env.observation_space, action_space=env.action_space, **agent_kwargs
     )
     agent_target = deepcopy(agent)
+
+    q_params = chain(agent.q1.parameters(), agent.q2.parameters())
 
     # Freeze target mu, Q so they are not updated by optimizers
     for p in agent_target.parameters():
         p.requires_grad = False
 
-    var_counts = tuple(count_vars(module) for module in [agent.pi, agent.q])
+    var_counts = tuple(count_vars(module) for module in [agent.pi, agent.q1])
     logger.log(
         f"\nNumber of parameters \t policy: {var_counts[0]} q: {var_counts[1]}\n"
     )
@@ -66,19 +72,19 @@ def ddpg_new(
     buf = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
 
     pi_optimizer = Adam(agent.pi.parameters(), lr=pi_lr)
-    q_optimizer = Adam(agent.q.parameters(), lr=q_lr)
+    q_optimizer = Adam(q_params, lr=q_lr)
 
     # Set up model saving
     logger.setup_pytorch_saver(agent)
 
     def compute_loss_pi(data):
         o = data["obs"]
-        q_pi = agent.q(torch.cat([o, agent.pi(o)], dim=-1))
+        q_pi = agent.q1(torch.cat([o, agent.pi(o)], dim=-1))
         return -q_pi.mean()
 
-    # Set up function for computing DDPG Q-loss
+    # Set up function for computing td3 Q-loss
     def compute_loss_q(data):
-        o, a, r, o2, d = (
+        o, a, r, obs_next, d = (
             data["obs"],
             data["act"],
             data["rew"],
@@ -86,20 +92,28 @@ def ddpg_new(
             data["done"],
         )
 
-        q = agent.q(torch.cat([o, a], dim=-1))
+        q1 = agent.q1(torch.cat([o, a], dim=-1))
+        q2 = agent.q2(torch.cat([o, a], dim=-1))
 
         # Bellman backup for Q function
         with torch.no_grad():
-            # q_pi_targ = ac_targ.q(o2, ac_targ.pi(o2))
-            a2 = agent_target.pi(o2)
-            q_pi_targ = agent_target.q(torch.cat([o2, a2], dim=-1))
-            backup = r + gamma * (1 - d) * q_pi_targ
+            a_next = agent_target.pi(obs_next)
+            a_next += torch.clamp(target_noise*torch.randn_like(a_next), -target_noise_lim, target_noise_lim)
+            a_next = torch.clamp(a_next, agent_target.act_low[0], agent_target.act_high[0])
+
+            q_targ1 = agent_target.q1(torch.cat([obs_next, a_next], dim=-1))
+            q_targ2 = agent_target.q2(torch.cat([obs_next, a_next], dim=-1))
+            q_targ = torch.min(q_targ1, q_targ2)
+            backup = r + gamma * (1 - d) * q_targ
 
         # MSE loss against Bellman backup
-        loss_q = ((q - backup) ** 2).mean()
+        loss_q = ((q1 - backup) ** 2).mean() + ((q2 - backup) ** 2).mean()
 
         # Useful info for logging
-        loss_info = dict(QVals=q.detach().numpy())
+        loss_info = dict(
+            Q1Vals=q1.detach().numpy(),
+            Q2Vals=q2.detach().numpy(),
+        )
 
         return loss_q, loss_info
 
@@ -109,7 +123,7 @@ def ddpg_new(
     # batch_time = 0.0
 
     # def update(q_time, pi_time, target_time):
-    def update():
+    def update(i_step):
         # Get training data from buffer
         # data = buf.get(batch_size=batch_size)
         data = buf.sample_batch(batch_size)
@@ -123,27 +137,30 @@ def ddpg_new(
         # t1 = time.time()
         # q_time += (t1-t0)
 
-        # Freeze Q params during policy update to save time
-        for p in agent.q.parameters():
-            p.requires_grad = False
-        # Update policy
-        pi_optimizer.zero_grad()
-        loss_pi = compute_loss_pi(data)
-        loss_pi.backward()
-        pi_optimizer.step()
+        logger.store(LossQ=loss_q.item(), **loss_info)
 
-        # Unfreeze Q params after policy update
-        for p in agent.q.parameters():
-            p.requires_grad = True
-        # t2 = time.time()
-        # pi_time += (t2-t1)
+        if i_step % policy_delay == 0:
+            # Freeze Q params during policy update to save time
+            for p in q_params:
+                p.requires_grad = False
+            # Update policy
+            pi_optimizer.zero_grad()
+            loss_pi = compute_loss_pi(data)
+            loss_pi.backward()
+            pi_optimizer.step()
 
-        logger.store(LossQ=loss_q.item(), LossPi=loss_pi.item(), **loss_info)
+            # Unfreeze Q params after policy update
+            for p in q_params:
+                p.requires_grad = True
+            # t2 = time.time()
+            # pi_time += (t2-t1)
 
-        with torch.no_grad():
-            for p, p_target in zip(agent.parameters(), agent_target.parameters()):
-                p_target.data.mul_(polyak)
-                p_target.data.add_((1 - polyak) * p.data)
+            logger.store(LossPi=loss_pi.item())
+
+            with torch.no_grad():
+                for p, p_target in zip(agent.parameters(), agent_target.parameters()):
+                    p_target.data.mul_(polyak)
+                    p_target.data.add_((1 - polyak) * p.data)
         # t3 = time.time()
         # target_time += (t3-t2)
 
@@ -204,13 +221,13 @@ def ddpg_new(
 
             if t_total >= update_after and t % update_every == 0:
                 update_start = time.time()
-                for _ in range(update_every):
-                    update()
+                for i in range(update_every):
+                    update(i)
                     # q_time, pi_time, target_time = update(q_time, pi_time, target_time)
                     # n_updates += 1
-                update_end = time.time()
-                update_time += update_end - update_start
-                total_time = update_end - start_time
+                # update_end = time.time()
+                # update_time += update_end - update_start
+                # total_time = update_end - start_time
                 # print(f't total {t_total}; t {t}; epoch {epoch}')
                 # print(f'update time {update_time}')
                 # print(f'total time {total_time}')
@@ -219,6 +236,12 @@ def ddpg_new(
             t_total += 1
 
         deterministic_policy_test()
+
+        # # # Look at pi, q functions
+        # batch = buf.sample_batch(batch_size)
+        # eval_q_td3(batch, agent)
+        # eval_a(batch, agent)
+
         # Save model
         if (epoch % save_freq == 0) or (epoch == epochs - 1):
             logger.save_state({"env": env}, None)
@@ -230,7 +253,8 @@ def ddpg_new(
         logger.log_tabular("EpLen", average_only=True)
         logger.log_tabular("TestEpLen", average_only=True)
         logger.log_tabular("TotalEnvInteracts", (epoch + 1) * steps_per_epoch)
-        logger.log_tabular("QVals", with_min_and_max=True)
+        logger.log_tabular("Q1Vals", with_min_and_max=True)
+        logger.log_tabular("Q2Vals", with_min_and_max=True)
         logger.log_tabular("LossPi", average_only=True)
         logger.log_tabular("LossQ", average_only=True)
         logger.log_tabular("Time", time.time() - start_time)
