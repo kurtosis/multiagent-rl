@@ -153,15 +153,15 @@ class OldRDPGBuffer:
             data[v] = data[v].transpose(0, 1)
         return data
 
-    def sample_episodes(self, sample_size=100):
-        sample_indexes = np.random.randint(0, self.filled_size, sample_size)
+    def sample_episodes(self, batch_size=100):
+        sample_indexes = np.random.randint(0, self.filled_size, batch_size)
         samples = [self.episodes[i] for i in sample_indexes]
         return self.reshape_samples(samples)
 
-    def get_latest_episodes(self, sample_size=100):
+    def get_latest_episodes(self, batch_size=100):
         end = self.ptr
-        if self.ptr >= sample_size:
-            start = self.ptr - sample_size
+        if self.ptr >= batch_size:
+            start = self.ptr - batch_size
             samples = self.episodes[start:end]
             self.reshape_samples(samples)
 
@@ -227,8 +227,8 @@ class RDPGBuffer:
                 self.ptr_ep = 0
                 self.full = True
 
-    def sample_episodes(self, sample_size=100):
-        sample_indexes = np.random.randint(0, self.filled_size, sample_size)
+    def sample_episodes(self, batch_size=100):
+        sample_indexes = np.random.randint(0, self.filled_size, batch_size)
         samples = {
             v: torch.as_tensor(self.data[v][:, sample_indexes, :]) for v in self.data
         }

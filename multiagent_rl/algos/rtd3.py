@@ -1,9 +1,12 @@
+from copy import deepcopy
+import itertools
+
 from multiagent_rl.algos.agents import *
 from multiagent_rl.algos.training import count_vars
 from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.algos.buffers import *
 
-def rdpg(
+def rtd3(
     env_fn,
     agent_fn=RDPGAgent,
     seed=0,
@@ -17,6 +20,8 @@ def rdpg(
     test_episodes=10,
     log_interval=10,
     max_episode_len=3,
+    target_noise=0.2,
+    noise_clip=0.5,
     gamma=0.99,
     polyak=0.995,
     pi_lr=1e-3,
@@ -46,6 +51,11 @@ def rdpg(
     test_env = deepcopy(env)
     # test_env = env_fn(**env_kwargs)
     # env.seed(seed)
+    env.seed(seed)
+    env.action_space.seed(seed)
+    test_env.seed(seed)
+    test_env.action_space.seed(seed)
+
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape
     agent = agent_fn(
@@ -58,16 +68,18 @@ def rdpg(
         p.requires_grad = False
 
 
-    var_counts = tuple(count_vars(module) for module in [agent.pi, agent.q])
-
+    var_counts = tuple(count_vars(module) for module in [agent.pi, agent.q1])
     logger.log(
         f"\nNumber of parameters \t policy: {var_counts[0]} q: {var_counts[1]}\n"
     )
 
+    # List of parameters for both Q-networks (save this for convenience)
+    q_params = itertools.chain(agent.q1.parameters(), agent.q2.parameters())
+
     # buf = RDPGBuffer(max_buffer_len)
     buf = RDPGBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
     pi_optimizer = Adam(agent.pi.parameters(), lr=pi_lr)
-    q_optimizer = Adam(agent.q.parameters(), lr=q_lr)
+    q_optimizer = Adam(q_params, lr=q_lr)
 
     # Set up model saving
     logger.setup_pytorch_saver(agent)
@@ -77,7 +89,7 @@ def rdpg(
         o = data["obs"]
         # Get actions that agent policy would take at each step
         a = agent.pi(o)
-        return -agent.q(torch.cat((o, a), dim=-1)).mean()
+        return -agent.q1(torch.cat((o, a), dim=-1)).mean()
 
     def compute_q_target(data):
         r, o_next, d = data["rwd"], data["obs_next"], data["done"]
@@ -85,7 +97,16 @@ def rdpg(
         with torch.no_grad():
             o_padded = pad(o, (0, 0, 0, 0, 0, 1), "constant", 0)
             a_padded = agent_target.pi(o_padded)
-            q_target_padded = agent_target.q(torch.cat((o_padded, a_padded), dim=-1))
+
+            # Target policy smoothing
+            epsilon = torch.randn_like(a_padded) * target_noise
+            epsilon = torch.clamp(epsilon, -noise_clip, noise_clip)
+            a_padded = a_padded + epsilon
+            a_padded = torch.clamp(a_padded, agent_target.act_low[0], agent_target.act_high[0])
+
+            q1_target_padded = agent_target.q1(torch.cat((o_padded, a_padded), dim=-1))
+            q2_target_padded = agent_target.q2(torch.cat((o_padded, a_padded), dim=-1))
+            q_target_padded = torch.min(q1_target_padded, q2_target_padded)
 
             # HACK - probably a way to do this in one line with slice?
             if len(q_target_padded.shape)==3:
@@ -93,7 +114,7 @@ def rdpg(
             elif len(q_target_padded.shape)==2:
                 q_target = q_target_padded[1:, :]
             else:
-                raise ValueError('Q tensor has unexpected number of dimensions!')
+                raise ValueError('Q target has unexpected number of dimensions!')
 
             # reshape so that this will work with DDPG agent (for testing)
             q_target = q_target.reshape_as(d)
@@ -102,12 +123,24 @@ def rdpg(
             # q_target = r
         return q_target
 
-    def compute_loss_q(data, q_target):
+
+    def compute_loss_q(data, backup):
         o, a = data["obs"], data["act"]
-        q = agent.q(torch.cat((o, a), dim=-1))
-        q_loss_info = {"QVals": q.detach().numpy()}
-        q = q.reshape_as(q_target)
-        return ((q - q_target) ** 2).mean(), q_loss_info
+        q1 = agent.q1(torch.cat([o, a], dim=-1))
+        q2 = agent.q2(torch.cat([o, a], dim=-1))
+        # is this needed?
+        q1 = q1.reshape_as(backup)
+        q2 = q2.reshape_as(backup)
+
+        # MSE loss against Bellman backup
+        loss_q = ((q1 - backup) ** 2).mean() + ((q2 - backup) ** 2).mean()
+
+        # Useful info for logging
+        loss_info = dict(
+            Q1Vals=q1.detach().numpy(),
+            Q2Vals=q2.detach().numpy(),
+        )
+        return loss_q, loss_info
 
     # def update(data_time, q_time, pi_time, target_time):
     def update():
@@ -128,7 +161,7 @@ def rdpg(
         # q_time += (t1-t0)
 
         # Freeze Q params during policy update to save time
-        for p in agent.q.parameters():
+        for p in q_params:
             p.requires_grad = False
         # Update policy
         pi_optimizer.zero_grad()
@@ -136,7 +169,7 @@ def rdpg(
         pi_loss.backward()
         pi_optimizer.step()
         # Unfreeze Q params after policy update
-        for p in agent.q.parameters():
+        for p in q_params:
             p.requires_grad = True
         t2 = time.time()
         # pi_time += (t2-t1)

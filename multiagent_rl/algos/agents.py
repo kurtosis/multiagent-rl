@@ -344,7 +344,7 @@ class DDPGAgent(nn.Module):
 
     def __init__(
         self,
-        obs_space=None,
+        observation_space=None,
         action_space=None,
         obs_dim=None,
         hidden_layers_mu=(256, 256),
@@ -360,7 +360,7 @@ class DDPGAgent(nn.Module):
     ):
         super().__init__()
         if obs_dim is None:
-            obs_dim = obs_space.shape[0]
+            obs_dim = observation_space.shape[0]
         self.act_dim = action_space.shape[0]
         self.act_low = action_space.low
         self.act_high = action_space.high
@@ -512,6 +512,8 @@ class TD3Agent(nn.Module):
             act = np.clip(act, self.act_low[0], self.act_high[0])
         return act
 
+    def reset_state(self):
+        pass
 
 class SACAgent(nn.Module):
     """
