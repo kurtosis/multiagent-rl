@@ -44,8 +44,12 @@ def rdpg(
 
     env = env_fn(**env_kwargs)
     test_env = deepcopy(env)
-    # test_env = env_fn(**env_kwargs)
-    # env.seed(seed)
+
+    env.seed(seed)
+    env.action_space.seed(seed)
+    test_env.seed(seed)
+    test_env.action_space.seed(seed)
+
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape
     agent = agent_fn(
@@ -79,7 +83,7 @@ def rdpg(
         a = agent.pi(o)
         return -agent.q(torch.cat((o, a), dim=-1)).mean()
 
-    def compute_q_target(data):
+    def compute_backup(data):
         r, o_next, d = data["rwd"], data["obs_next"], data["done"]
         o = data['obs']
         with torch.no_grad():
@@ -97,35 +101,33 @@ def rdpg(
 
             # reshape so that this will work with DDPG agent (for testing)
             q_target = q_target.reshape_as(d)
-            q_target = r + gamma * (1 - d) * q_target
-            # TESTING HACK - set all future q to 0 (assumes known optimal policy)
-            # q_target = r
-        return q_target
+            backup = r + gamma * (1 - d) * q_target
+        return backup
 
-    def compute_loss_q(data, q_target):
+    def compute_loss_q(data, backup):
         o, a = data["obs"], data["act"]
         q = agent.q(torch.cat((o, a), dim=-1))
         q_loss_info = {"QVals": q.detach().numpy()}
-        q = q.reshape_as(q_target)
-        return ((q - q_target) ** 2).mean(), q_loss_info
+        q = q.reshape_as(backup)
+        return ((q - backup) ** 2).mean(), q_loss_info
 
-    # def update(data_time, q_time, pi_time, target_time):
-    def update():
+    def update(data_time, q_time, pi_time, target_time):
+    # def update():
         # Get training data from buffer
         t0_data = time.time()
         data = buf.sample_episodes(batch_size=batch_size)
         t1_data = time.time()
-        # data_time += (t1_data-t0_data)
+        data_time += (t1_data-t0_data)
 
     # Update Q function
         t0 = time.time()
         q_optimizer.zero_grad()
-        q_target = compute_q_target(data)
-        q_loss, q_loss_info = compute_loss_q(data, q_target)
+        backup = compute_backup(data)
+        q_loss, q_loss_info = compute_loss_q(data, backup)
         q_loss.backward()
         q_optimizer.step()
         t1 = time.time()
-        # q_time += (t1-t0)
+        q_time += (t1-t0)
 
         # Freeze Q params during policy update to save time
         for p in agent.q.parameters():
@@ -139,14 +141,14 @@ def rdpg(
         for p in agent.q.parameters():
             p.requires_grad = True
         t2 = time.time()
-        # pi_time += (t2-t1)
+        pi_time += (t2-t1)
 
         with torch.no_grad():
             for p, p_target in zip(agent.parameters(), agent_target.parameters()):
                 p_target.data.mul_(polyak)
                 p_target.data.add_((1 - polyak) * p.data)
         t3 = time.time()
-        # target_time += (t3-t2)
+        target_time += (t3-t2)
 
         logger.store(LossPi=pi_loss.item(), LossQ=q_loss.item(), **q_loss_info)
         return data_time, q_time, pi_time, target_time
@@ -214,9 +216,8 @@ def rdpg(
                 if epoch % 3 == 0:
                     pass
                 for _ in range(update_every):
-                    update()
-                    # data_time, q_time, pi_time, target_time = update(data_time, q_time, pi_time, target_time)
-                    # n_updates += 1
+                    # update()
+                    data_time, q_time, pi_time, target_time = update(data_time, q_time, pi_time, target_time)
                 # update_end = time.time()
                 # update_time += (update_end - update_start)
                 # total_time = update_end - start_time
@@ -238,12 +239,12 @@ def rdpg(
 
         # Log info about epoch
         logger.log_tabular("Epoch", epoch)
-        # logger.log_tabular("EpRet", with_min_and_max=True)
+        logger.log_tabular("EpRet", with_min_and_max=True)
         logger.log_tabular("TestEpRet", with_min_and_max=True)
-        # logger.log_tabular("EpLen", average_only=True)
-        # logger.log_tabular("TestEpLen", average_only=True)
-        # logger.log_tabular("TotalEnvInteracts", (epoch + 1) * steps_per_epoch)
-        # logger.log_tabular("QVals", with_min_and_max=True)
+        logger.log_tabular("EpLen", average_only=True)
+        logger.log_tabular("TestEpLen", average_only=True)
+        logger.log_tabular("TotalEnvInteracts", (epoch + 1) * steps_per_epoch)
+        logger.log_tabular("QVals", with_min_and_max=True)
         logger.log_tabular("LossPi", average_only=True)
         logger.log_tabular("LossQ", average_only=True)
         logger.log_tabular("Time", time.time() - start_time)

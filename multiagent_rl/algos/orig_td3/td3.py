@@ -7,7 +7,7 @@ import gym
 import time
 import multiagent_rl.algos.orig_td3.core as core
 from multiagent_rl.utils.logx import EpochLogger
-from multiagent_rl.utils.evals import *
+from multiagent_rl.utils.evaluation_utils import *
 
 
 class ReplayBuffer:

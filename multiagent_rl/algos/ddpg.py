@@ -3,7 +3,7 @@ from multiagent_rl.algos.training import count_vars
 from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.algos.buffers import *
 from multiagent_rl.algos.orig_ddpg.ddpg import ReplayBuffer
-from multiagent_rl.utils.evals import *
+from multiagent_rl.utils.evaluation_utils import *
 
 
 def ddpg_new(
@@ -21,6 +21,7 @@ def ddpg_new(
     start_steps=10000,
     update_after=1000,
     update_every=50,
+    save_q_every=1000,
     num_test_episodes=10,
     log_interval=10,
     max_episode_len=1000,
@@ -28,6 +29,7 @@ def ddpg_new(
     env_kwargs=dict(),
     logger_kwargs=dict(),
     save_freq=1,
+    q_filename="~/q_map_ddpg_noise_5.csv",
 ):
     """Run DDPG training."""
     # Initialize environment, agent, auxiliary objects
@@ -42,14 +44,16 @@ def ddpg_new(
     test_env = env_fn(**env_kwargs)
 
     env.seed(seed)
-    env.action_space.seed(0)
+    env.action_space.seed(seed)
     test_env.seed(seed)
-    test_env.action_space.seed(0)
+    test_env.action_space.seed(seed)
 
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape
     agent = agent_fn(
-        obs_space=env.observation_space, action_space=env.action_space, **agent_kwargs
+        observation_space=env.observation_space,
+        action_space=env.action_space,
+        **agent_kwargs,
     )
     agent_target = deepcopy(agent)
 
@@ -158,6 +162,7 @@ def ddpg_new(
             while not d and not ep_len == max_episode_len:
                 # with torch.no_grad():
                 a = agent.act(torch.as_tensor(o, dtype=torch.float32), noise=False)
+                logger.store(TestActOffer=a[0], TestActDemand=a[1])
                 o, r, d, _ = test_env.step(a)
                 ep_ret += r
                 ep_len += 1
@@ -178,6 +183,7 @@ def ddpg_new(
                 act = env.action_space.sample()
             else:
                 act = agent.act(torch.as_tensor(obs, dtype=torch.float32), noise=True)
+            logger.store(ActOffer=act[0], ActDemand=act[1])
             # Step environment given latest agent action
             obs_next, reward, done, _ = env.step(act)
 
@@ -216,6 +222,8 @@ def ddpg_new(
                 # print(f'total time {total_time}')
                 # print('---')
 
+            if t_total >= update_after and t_total % save_q_every == 0:
+                save_q_map(agent.q, q_filename, step=t_total)
             t_total += 1
 
         deterministic_policy_test()
@@ -225,7 +233,11 @@ def ddpg_new(
 
         # Log info about epoch
         logger.log_tabular("Epoch", epoch)
+        logger.log_tabular("ActOffer", with_min_and_max=True)
+        logger.log_tabular("ActDemand", with_min_and_max=True)
         logger.log_tabular("EpRet", with_min_and_max=True)
+        logger.log_tabular("TestActOffer", with_min_and_max=True)
+        logger.log_tabular("TestActDemand", with_min_and_max=True)
         logger.log_tabular("TestEpRet", with_min_and_max=True)
         logger.log_tabular("EpLen", average_only=True)
         logger.log_tabular("TestEpLen", average_only=True)

@@ -4,7 +4,7 @@ from multiagent_rl.algos.training import count_vars
 from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.algos.buffers import *
 from multiagent_rl.algos.orig_td3.td3 import ReplayBuffer
-from multiagent_rl.utils.evals import *
+from multiagent_rl.utils.evaluation_utils import *
 
 
 def td3_new(
@@ -178,6 +178,7 @@ def td3_new(
                 o, r, d, _ = test_env.step(a)
                 ep_ret += r
                 ep_len += 1
+                logger.store(TestActOffer=a[0], TestActDemand=a[1])
             logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
 
     start_time = time.time()
@@ -195,6 +196,7 @@ def td3_new(
                 act = env.action_space.sample()
             else:
                 act = agent.act(torch.as_tensor(obs, dtype=torch.float32), noise=True)
+            logger.store(ActOffer=act[0], ActDemand=act[1])
             # Step environment given latest agent action
             obs_next, reward, done, _ = env.step(act)
 
@@ -248,7 +250,11 @@ def td3_new(
 
         # Log info about epoch
         logger.log_tabular("Epoch", epoch)
+        logger.log_tabular("ActOffer", with_min_and_max=True)
+        logger.log_tabular("ActDemand", with_min_and_max=True)
         logger.log_tabular("EpRet", with_min_and_max=True)
+        logger.log_tabular("TestActOffer", with_min_and_max=True)
+        logger.log_tabular("TestActDemand", with_min_and_max=True)
         logger.log_tabular("TestEpRet", with_min_and_max=True)
         logger.log_tabular("EpLen", average_only=True)
         logger.log_tabular("TestEpLen", average_only=True)

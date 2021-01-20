@@ -50,9 +50,10 @@ class ConstantDualUltimatum(gym.Env):
         self,
         ep_len=10,
         reward="ultimatum",
-        opponent_offer=0.5,
-        opponent_demand=0.5,
+        opponent_offer=0.3,
+        opponent_demand=0.9,
         fixed=True,
+        reward_penalty=0.01,
     ):
         super(ConstantDualUltimatum, self).__init__()
         self.fixed = fixed
@@ -83,18 +84,40 @@ class ConstantDualUltimatum(gym.Env):
             self.reward = self._l1_reward
         elif reward == "l1_const":
             self.reward = self._l1_const_reward
+        elif reward == "non_flat":
+            self.reward_penalty = reward_penalty
+            self.reward = self._non_flat_reward
         else:
             self.reward = self._ultimatum_reward
 
     def _ultimatum_reward(self, action):
+        """The standard reward based on Ultimatum rules."""
         offer, demand = action
         if offer + EPS >= self.opponent_demand and self.opponent_offer + EPS >= demand:
-            # reward = (1 - offer) + self.opponent_offer
-            reward = 1 - self.opponent_demand - np.abs(offer - self.opponent_demand)
+            reward = (1 - offer) + self.opponent_offer
+            # reward = 1 - self.opponent_demand - np.abs(offer - self.opponent_demand)
         else:
-            reward = 1 - self.opponent_demand - np.abs(offer - self.opponent_demand)
-            # reward = 0
+            # reward = 1 - self.opponent_demand - np.abs(offer - self.opponent_demand)
+            reward = 0
         return reward
+
+    def _non_flat_reward(self, action):
+        """Reproduce ultimatum reward for successful deals but include a gradient (non-zero reward)
+        for unsuccesful deals so the agent can still learn."""
+        offer, demand = action
+        reward = 0.0
+        multiplier = 1.0
+        if offer + EPS >= self.opponent_demand:
+            reward += 1 - offer
+        else:
+            reward += (1 - self.opponent_demand) * offer / self.opponent_demand
+            multiplier *= self.reward_penalty
+        if self.opponent_offer + EPS >= demand:
+            reward += self.opponent_offer
+        else:
+            reward += demand
+            multiplier *= self.reward_penalty
+        return multiplier * reward
 
     def _l1_reward(self, action):
         """Simple reward for testing"""
@@ -120,6 +143,8 @@ class ConstantDualUltimatum(gym.Env):
         obs = np.array(
             [self.opponent_offer, self.opponent_demand, action[0], action[1], 0]
         )
+        # HACK - don't change obs
+        obs = np.zeros_like(obs)
         done = 0
         if self.current_turn == (self.ep_len - 1):
             done = 1
@@ -136,6 +161,8 @@ class ConstantDualUltimatum(gym.Env):
             self.opponent_demand = np.random.rand()
         # Create init state obs, with flag indicating this is the first step
         obs = np.array([self.opponent_offer, self.opponent_demand, 0, 0, 1])
+        # HACK - don't change obs
+        obs = np.zeros_like(obs)
         return obs
 
     def render(self, mode="human"):
