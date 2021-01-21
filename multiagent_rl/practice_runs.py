@@ -23,6 +23,7 @@ steps_per_epoch = 1000
 epochs = 200
 pi_lr = 1e-3
 q_lr = 1e-3
+a_lr = 2e-3
 batch_size = 1000
 batch_size_eps = 100
 start_steps = 3000
@@ -131,13 +132,13 @@ for i in range(n_runs):
     #     target_entropy = -4.0,
     # )
 
-    sac_new(
+    sac(
         seed=seed,
         steps_per_epoch=steps_per_epoch,
         epochs=epochs,
         pi_lr=pi_lr,
         q_lr=q_lr,
-        a_lr=2e-3,
+        a_lr=a_lr,
         batch_size=batch_size,
         start_steps=start_steps,
         update_after=update_after,
@@ -147,11 +148,9 @@ for i in range(n_runs):
         max_episode_len=ep_len,
         agent_kwargs={"hidden_layers_pi": (32, 32), "hidden_layers_q": (32, 32)},
         env_fn=ConstantDualUltimatum,
-        # env_kwargs={"ep_len":100},
-        # env_kwargs={"reward": "non_flat", "reward_penalty": 1.0},
         logger_kwargs={
             "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/sac/",
-            "exp_name": "alpha_8",
+            "exp_name": "alpha_8_new_buf",
         },
         gamma=0.99,
         alpha=0.05,

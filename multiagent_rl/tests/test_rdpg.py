@@ -110,7 +110,7 @@ def train_LSTMEstimator(
 
     def update(sample_size=1000, update=True):
         data = buf.sample_episodes(sample_size=sample_size)
-        r, o_next, d = data["reward"], data["obs_next"], data["done"]
+        r, o_next, d = data["rwd"], data["obs_next"], data["done"]
         a = data["act"]
         o = data["obs"]
         q_optimizer.zero_grad()

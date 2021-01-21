@@ -252,7 +252,7 @@ class TransitionBuffer:
     def __init__(self, obs_dim, act_dim, max_size):
         self.obs = np.zeros(merge_shape(max_size, obs_dim), dtype=np.float32)
         self.act = np.zeros(merge_shape(max_size, act_dim), dtype=np.float32)
-        self.reward = np.zeros(max_size, dtype=np.float32)
+        self.rwd = np.zeros(max_size, dtype=np.float32)
         self.obs_next = np.zeros(merge_shape(max_size, obs_dim), dtype=np.float32)
         self.done = np.zeros(max_size, dtype=np.float32)
         self.ptr = 0
@@ -260,7 +260,7 @@ class TransitionBuffer:
         self.filled_size = 0
         self.full = False
 
-    def store(self, obs, act, reward, obs_next, done):
+    def store(self, obs, act, rwd, obs_next, done):
         """Add current step variables to buffer."""
         # Cycle through buffer, overwriting oldest entry.
         # Note that buffer is never flushed, unlike on-policy methods.
@@ -269,14 +269,14 @@ class TransitionBuffer:
             self.full = True
         self.obs[self.ptr] = obs
         self.act[self.ptr] = act
-        self.reward[self.ptr] = reward
+        self.rwd[self.ptr] = rwd
         self.obs_next[self.ptr] = obs_next
         self.done[self.ptr] = done
         self.ptr += 1
         if not self.full:
             self.filled_size += 1
 
-    def get(self, batch_size=100):
+    def sample_batch(self, batch_size=128):
         """
         Return needed variables (as tensors) over episodes in buffer.
         Reset pointers for next epoch.
@@ -286,7 +286,7 @@ class TransitionBuffer:
         data = {
             "obs": torch.as_tensor(self.obs[sample_indexes], dtype=torch.float32),
             "act": torch.as_tensor(self.act[sample_indexes], dtype=torch.float32),
-            "reward": torch.as_tensor(self.reward[sample_indexes], dtype=torch.float32),
+            "rwd": torch.as_tensor(self.rwd[sample_indexes], dtype=torch.float32),
             "obs_next": torch.as_tensor(
                 self.obs_next[sample_indexes], dtype=torch.float32
             ),
@@ -334,7 +334,7 @@ class MultiagentTransitionBuffer:
         data = {
             "obs": torch.as_tensor(self.obs[sample_indexes], dtype=torch.float32),
             "act": torch.as_tensor(self.act[sample_indexes], dtype=torch.float32),
-            "reward": torch.as_tensor(self.reward[sample_indexes], dtype=torch.float32),
+            "rwd": torch.as_tensor(self.reward[sample_indexes], dtype=torch.float32),
             "obs_next": torch.as_tensor(
                 self.obs_next[sample_indexes], dtype=torch.float32
             ),

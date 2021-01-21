@@ -136,7 +136,7 @@ class DualUltimatumTournament(gym.Env):
             np.array([actions[i] for i in match]) for match in self.match_pairs
         ]
 
-        # Pass actions to each match env, get next obs/reward
+        # Pass actions to each match env, get next obs/rwd
         match_outputs = [
             match_env.step(acts)
             for acts, match_env in zip(match_actions, self.match_env_list)

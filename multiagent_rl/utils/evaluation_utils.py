@@ -153,13 +153,6 @@ def save_q_map(q, filename, step, n=101):
         result.to_csv(filename, index=False, mode="a", header=False)
 
 
-def check_q_backup():
-    condn = (a[:, 0] > 0.9) * (a[:, 1] < 0.3)
-    ff = torch.cat((a, backup.unsqueeze(dim=1)), dim=1)
-    ff = torch.cat((ff, q1.unsqueeze(dim=1)), dim=1)
-    ff = ff[condn]
-    print(ff)
-
 def eval_done(agent, agent_target, data, gamma, alpha, q_lr, n=101):
     obs, act, rwd, obs_next, done = (
             data["obs"],
@@ -168,36 +161,37 @@ def eval_done(agent, agent_target, data, gamma, alpha, q_lr, n=101):
             data["obs2"],
             data["done"],
         )
-        agent_a = deepcopy(agent)
+    agent_a = deepcopy(agent)
 
-        qa_params = chain(agent_a.q1.parameters(), agent_a.q2.parameters())
-        qa_optimizer = Adam(qa_params, lr=q_lr)
+    qa_params = chain(agent_a.q1.parameters(), agent_a.q2.parameters())
+    qa_optimizer = Adam(qa_params, lr=q_lr)
 
-        # done = torch.zeros_like(done)
+    # done = torch.zeros_like(done)
 
-        q1 = agent_a.q1(torch.cat([obs, act], dim=-1))
-        q2 = agent_a.q2(torch.cat([obs, act], dim=-1))
+    q1 = agent_a.q1(torch.cat([obs, act], dim=-1))
+    q2 = agent_a.q2(torch.cat([obs, act], dim=-1))
 
-        # Bellman backup for Q function
-        with torch.no_grad():
-            a_next, logprob_next = agent_a.pi(obs_next)
+    # Bellman backup for Q function
+    with torch.no_grad():
+        a_next, logprob_next = agent_a.pi(obs_next)
 
-            q1_target = agent_target.q1(torch.cat([obs_next, a_next], dim=-1))
-            q2_target = agent_target.q2(torch.cat([obs_next, a_next], dim=-1))
-            q_target = torch.min(q1_target, q2_target)
-            backup = rwd + gamma * (1 - done) * (q_target - alpha * logprob_next)
+        q1_target = agent_target.q1(torch.cat([obs_next, a_next], dim=-1))
+        q2_target = agent_target.q2(torch.cat([obs_next, a_next], dim=-1))
+        q_target = torch.min(q1_target, q2_target)
+        backup = rwd + gamma * (1 - done) * (q_target - alpha * logprob_next)
 
-        # MSE loss against Bellman backup
-        loss_qa = ((q1 - backup) ** 2).mean() + ((q2 - backup) ** 2).mean()
+    # MSE loss against Bellman backup
+    loss_qa = ((q1 - backup) ** 2).mean() + ((q2 - backup) ** 2).mean()
 
-        qa_optimizer.zero_grad()
-        loss_qa.backward()
-        qa_optimizer.step()
+    qa_optimizer.zero_grad()
+    loss_qa.backward()
+    qa_optimizer.step()
 
-        grid = np.linspace(0, 1, n)
-        a0, a1 = np.meshgrid(grid, grid)
-        a0 = a0.reshape(-1)
-        a1 = a1.reshape(-1)
-        act = torch.tensor(np.stack((a0, a1), axis=1), dtype=torch.float32)
-        obs = torch.tensor([0, 0, 0, 0, 0], dtype=torch.float32)
-        obs = obs.repeat(act.shape[0], 1)
+    grid = np.linspace(0, 1, n)
+    a0, a1 = np.meshgrid(grid, grid)
+    a0 = a0.reshape(-1)
+    a1 = a1.reshape(-1)
+    act = torch.tensor(np.stack((a0, a1), axis=1), dtype=torch.float32)
+    obs = torch.tensor([0, 0, 0, 0, 0], dtype=torch.float32)
+    obs = obs.repeat(act.shape[0], 1)
+    return obs

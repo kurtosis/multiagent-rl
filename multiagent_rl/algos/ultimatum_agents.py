@@ -359,8 +359,8 @@ def dualultimatum_ddpg(
             episode_length += 1
 
             # Store current step in buffer
-            # buf.store(obs, act_1, reward[0], obs_next, done)
-            # buf.store(obs, act_2, reward[1], obs_next, done)
+            # buf.store(obs, act_1, rwd[0], obs_next, done)
+            # buf.store(obs, act_2, rwd[1], obs_next, done)
             multi_buf.store(obs, act, reward, obs_next, done)
 
             # update episode return and env state
@@ -481,7 +481,7 @@ def dualultimatum_td3(
         return -agent.q1(torch.cat((o, a), dim=-1)).mean()
 
     def compute_q_target(data):
-        r, o_next, d = data["reward"], data["obs_next"], data["done"]
+        r, o_next, d = data["rwd"], data["obs_next"], data["done"]
         with torch.no_grad():
             a_next = agent_target.pi(o_next)
             noise = np.random.randn(*a_next.shape) * target_noise_std
@@ -502,7 +502,7 @@ def dualultimatum_td3(
 
     def update(i):
         # Get training data from buffer
-        data = buf.get(sample_size=sample_size)
+        data = buf.sample_batch()
 
         # Update Q function
         q1_optimizer.zero_grad()

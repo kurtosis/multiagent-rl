@@ -2,16 +2,15 @@ from itertools import chain
 from torch.optim import Adam
 
 from multiagent_rl.algos.agents import *
-from multiagent_rl.algos.training import count_vars
-from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.algos.buffers import *
-
-# from multiagent_rl.algos.orig_td3.td3 import ReplayBuffer
 from multiagent_rl.algos.orig_sac.sac import ReplayBuffer
+from multiagent_rl.algos.training import count_vars
+
+from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.utils.evaluation_utils import *
 
 
-def sac_new(
+def sac(
     env_fn,
     agent_fn=SACAgent,
     seed=0,
@@ -84,8 +83,8 @@ def sac_new(
         f"\nNumber of parameters \t policy: {var_counts[0]} q1/2: {var_counts[1]}\n"
     )
 
-    # buf = TransitionBuffer(obs_dim, act_dim, replay_size)
-    buf = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
+    buf = TransitionBuffer(obs_dim, act_dim, replay_size)
+    # buf = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
 
     pi_optimizer = Adam(agent.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(q_params, lr=q_lr)
@@ -107,13 +106,14 @@ def sac_new(
 
         return loss_pi, pi_info
 
-    # Set up function for computing td3 Q-loss
     def compute_loss_q(data):
         obs, act, rwd, obs_next, done = (
             data["obs"],
             data["act"],
-            data["rew"],
-            data["obs2"],
+            data["rwd"],
+            # data["rew"],
+            data["obs_next"],
+            # data["obs2"],
             data["done"],
         )
 
@@ -238,15 +238,8 @@ def sac_new(
             obs = obs_next
 
             # check if episode is over
-            episode_capped = episode_length == max_episode_len
-            epoch_ended = t == steps_per_epoch - 1
-            end_episode = done or episode_capped or epoch_ended
-            if end_episode:
-                if done:
-                    logger.store(EpRet=episode_return, EpLen=episode_length)
-                obs = env.reset()
-                episode_return = 0
-                episode_length = 0
+            if done:
+                logger.store(EpRet=episode_return, EpLen=episode_length)
 
             if t_total >= update_after and t_total % update_every == 0:
                 update_start = time.time()
@@ -277,9 +270,10 @@ def sac_new(
         # eval_q_td3(batch, agent)
         # eval_a(batch, agent)
 
-        # Save model
-        if (epoch % save_freq == 0) or (epoch == epochs - 1):
-            logger.save_state({"env": env}, None)
+        # Save model at end of epoch
+        if t == steps_per_epoch - 1:
+            if (epoch % save_freq == 0) or (epoch == epochs - 1):
+                logger.save_state({"env": env}, None)
 
         # Log info about epoch
         logger.log_tabular("Epoch", epoch)

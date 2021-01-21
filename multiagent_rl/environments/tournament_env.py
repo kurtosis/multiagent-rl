@@ -91,7 +91,7 @@ class ConstantDualUltimatum(gym.Env):
             self.reward = self._ultimatum_reward
 
     def _ultimatum_reward(self, action):
-        """The standard reward based on Ultimatum rules."""
+        """The standard rwd based on Ultimatum rules."""
         offer, demand = action
         if offer + EPS >= self.opponent_demand and self.opponent_offer + EPS >= demand:
             reward = (1 - offer) + self.opponent_offer
@@ -204,7 +204,7 @@ class StaticDualUltimatum(gym.Env):
     def _l1_rewards(self, action):
         """Simple reward for testing"""
         offer_0, _ = action
-        l1 = -np.abs(offer_0 - offer_1)
+        l1 = -np.abs(offer_0 - self.opponent_offer)
         rewards = np.array([l1, l1])
         return rewards
 
@@ -528,7 +528,7 @@ class RoundRobinTournament(gym.Env):
             for pair, output in zip(self.match_pairs, match_outputs):
                 _, r, _, _ = output
                 reward[pair] = r - np.sum(r) / self.num_agents
-                # raw score reward
+                # raw score rwd
                 # reward[pair] = r
         # end of episode return
         elif (self.current_turn == 0) and (self.current_round == 1):

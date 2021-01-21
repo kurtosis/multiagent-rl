@@ -228,7 +228,7 @@ def vpg(
         #     #                 pickle.dump(training_records, f)
         #     break
 
-    # plt.plot([r.ep for r in training_records], [r.reward for r in training_records])
+    # plt.plot([r.ep for r in training_records], [r.rwd for r in training_records])
     # plt.title('VPG')
     # plt.xlabel('Episode')
     # plt.ylabel('Moving averaged episode reward')
@@ -432,10 +432,10 @@ def ppo(
         #     #                 pickle.dump(training_records, f)
         #     break
 
-    # plt.plot([r.ep for r in training_records], [r.reward for r in training_records])
+    # plt.plot([r.ep for r in training_records], [r.rwd for r in training_records])
     # plt.title('VPG')
     # plt.xlabel('Episode')
-    # plt.ylabel('Moving averaged episode reward')
+    # plt.ylabel('Moving averaged episode rwd')
     # plt.savefig("./vpg.png")
     # plt.show()
     # end_time = time.time()
@@ -514,7 +514,7 @@ def td3(
         return -agent.q1(torch.cat((o, a), dim=-1)).mean()
 
     def compute_q_target(data):
-        r, o_next, d = data["reward"], data["obs_next"], data["done"]
+        r, o_next, d = data["rwd"], data["obs_next"], data["done"]
         with torch.no_grad():
             a_next = agent_target.pi(o_next)
             noise = np.random.randn(*a_next.shape) * target_noise_std
@@ -535,7 +535,7 @@ def td3(
 
     def update(i):
         # Get training data from buffer
-        data = buf.get(sample_size=sample_size)
+        data = buf.sample_batch()
 
         # Update Q function
         q1_optimizer.zero_grad()
@@ -726,7 +726,7 @@ def sac(
     logger.setup_pytorch_saver(agent)
 
     def compute_q_target(data):
-        r, o_next, d = data["reward"], data["obs_next"], data["done"]
+        r, o_next, d = data["rwd"], data["obs_next"], data["done"]
         with torch.no_grad():
             a_next, logprob_next = agent.pi(o_next, get_logprob=True)
             q1_target = agent_target.q1(torch.cat((o_next, a_next), dim=-1))
@@ -755,7 +755,7 @@ def sac(
 
     def update():
         # Get training data from buffer
-        data = buf.get(sample_size=sample_size)
+        data = buf.sample_batch()
 
         # Update Q functions
         q_target = compute_q_target(data)

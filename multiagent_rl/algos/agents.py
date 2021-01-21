@@ -418,7 +418,7 @@ class DDPGAgent(nn.Module):
         return pi_loss
 
     def update_q(self, data=None, agent=None):
-        r, o_next, d = data["reward"], data["obs_next"], data["done"]
+        r, o_next, d = data["rwd"], data["obs_next"], data["done"]
         if agent is not None:
             r = r[:, agent]
         self.q_optimizer.zero_grad()
@@ -516,6 +516,7 @@ class TD3Agent(nn.Module):
 
     def reset_state(self):
         pass
+
 
 class SACAgent(nn.Module):
     """
@@ -652,7 +653,7 @@ class RDPGAgent(nn.Module):
         return pi_loss
 
     def update_q(self, data=None, agent=None):
-        r, o_next, d = data["reward"], data["obs_next"], data["done"]
+        r, o_next, d = data["rwd"], data["obs_next"], data["done"]
         if agent is not None:
             r = r[:, agent]
         self.q_optimizer.zero_grad()

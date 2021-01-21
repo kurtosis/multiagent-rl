@@ -393,7 +393,7 @@ class EpisodeLogger(EpochLogger):
         self.header = True
 
     def create_dataframe(
-        self, agent_vars=["opponent", "score", "reward"], action_vars=["action"]
+        self, agent_vars=["opponent", "score", "rwd"], action_vars=["action"]
     ):
         self.episode_df = pd.DataFrame(self.epoch_dict)
         for v in agent_vars:
