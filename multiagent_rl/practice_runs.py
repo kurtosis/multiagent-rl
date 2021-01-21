@@ -1,8 +1,8 @@
 # import multiagent_rl.algos.orig_ddpg.core as core
 # from multiagent_rl.algos.orig_ddpg.ddpg import *
 
-import multiagent_rl.algos.orig_sac.core as core
-from multiagent_rl.algos.orig_sac.sac import *
+# import multiagent_rl.algos.orig_sac.core as core
+# from multiagent_rl.algos.orig_sac.sac import *
 
 # import multiagent_rl.algos.orig_td3.core as core
 # from multiagent_rl.algos.orig_td3.td3 import *
@@ -10,14 +10,16 @@ from multiagent_rl.algos.orig_sac.sac import *
 # from multiagent_rl.algos.ddpg import *
 
 # from multiagent_rl.algos.rdpg import *
-from multiagent_rl.algos.td3 import *
+# from multiagent_rl.algos.td3 import *
+from multiagent_rl.algos.sac import *
+
 # from multiagent_rl.algos.rtd3 import *
 
 from multiagent_rl.environments.tournament_env import *
 
 ep_len = 10
 seed = 110
-steps_per_epoch = 100
+steps_per_epoch = 1000
 epochs = 200
 pi_lr = 1e-3
 q_lr = 1e-3
@@ -55,31 +57,108 @@ seed = 1
 for i in range(n_runs):
     seed += 1
 
-    sac(
+    # sac(
+    #     seed=seed,
+    #     steps_per_epoch=steps_per_epoch,
+    #     epochs=epochs,
+    #     lr=pi_lr,
+    #     a_lr = 2e-3,
+    #     batch_size=batch_size,
+    #     start_steps=start_steps,
+    #     update_after=update_after,
+    #     update_every=update_every,
+    #     save_freq=save_freq,
+    #     actor_critic=core.MLPActorCritic,
+    #     num_test_episodes=test_episodes,
+    #     max_ep_len=ep_len,
+    #     gamma=gamma,
+    #     ac_kwargs={"hidden_sizes": (32, 32)},
+    #     env_fn=ConstantDualUltimatum,
+    #     logger_kwargs={
+    #         "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/sac_orig/",
+    #         "exp_name": "done_auto_alpha_targ_4",
+    #     },
+    #     alpha=0.05,
+    # )
+
+    # sac_new(
+    #     seed=seed,
+    #     steps_per_epoch=steps_per_epoch,
+    #     epochs=epochs,
+    #     pi_lr=pi_lr,
+    #     q_lr=q_lr,
+    #     a_lr=2e-3,
+    #     batch_size=batch_size,
+    #     start_steps=start_steps,
+    #     update_after=update_after,
+    #     update_every=update_every,
+    #     save_freq=save_freq,
+    #     num_test_episodes=test_episodes,
+    #     max_episode_len=ep_len,
+    #     agent_kwargs={"hidden_layers_pi": (32, 32), "hidden_layers_q": (32, 32)},
+    #     env_fn=ConstantDualUltimatum,
+    #     logger_kwargs={
+    #         "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/sac/",
+    #         "exp_name": "gamma_50_alpha_05_targ_4",
+    #     },
+    #     gamma=0.5,
+    #     alpha=0.05,
+    #     target_entropy=-4.0,
+    # )
+    #
+    # sac_new(
+    #     seed=seed,
+    #     steps_per_epoch=steps_per_epoch,
+    #     epochs=epochs,
+    #     pi_lr=pi_lr,
+    #     q_lr=q_lr,
+    #     a_lr = 2e-3,
+    #     batch_size=batch_size,
+    #     start_steps=start_steps,
+    #     update_after=update_after,
+    #     update_every=update_every,
+    #     save_freq=save_freq,
+    #     num_test_episodes=test_episodes,
+    #     max_episode_len=ep_len,
+    #     agent_kwargs={"hidden_layers_pi": (32, 32), "hidden_layers_q": (32, 32)},
+    #     env_fn=ConstantDualUltimatum,
+    #     logger_kwargs={
+    #         "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/sac/",
+    #         "exp_name": "gamma_90_alpha_05_targ_4",
+    #     },
+    #     gamma=0.9,
+    #     alpha=0.05,
+    #     target_entropy = -4.0,
+    # )
+
+    sac_new(
         seed=seed,
         steps_per_epoch=steps_per_epoch,
         epochs=epochs,
-        lr=pi_lr,
-        a_lr = 2e-3,
+        pi_lr=pi_lr,
+        q_lr=q_lr,
+        a_lr=2e-3,
         batch_size=batch_size,
         start_steps=start_steps,
         update_after=update_after,
         update_every=update_every,
         save_freq=save_freq,
-        actor_critic=core.MLPActorCritic,
         num_test_episodes=test_episodes,
-        max_ep_len=ep_len,
-        gamma=gamma,
-        ac_kwargs={"hidden_sizes": (32, 32)},
+        max_episode_len=ep_len,
+        agent_kwargs={"hidden_layers_pi": (32, 32), "hidden_layers_q": (32, 32)},
         env_fn=ConstantDualUltimatum,
-        # env_kwargs=env_kwargs,
+        # env_kwargs={"ep_len":100},
+        # env_kwargs={"reward": "non_flat", "reward_penalty": 1.0},
         logger_kwargs={
-            "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/sac_orig/",
-            "exp_name": "auto_alpha_targ_8",
+            "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/sac/",
+            "exp_name": "alpha_8",
         },
+        gamma=0.99,
         alpha=0.05,
-        # alpha_factor=0.70,
-        # update_alpha_every=1000,
+        update_alpha_after=15000,
+        target_entropy=-8.0,
+        q_filename="/Users/kurtsmith/research/multiagent-rl/data/q_alpha_8",
+        save_q_every=5000,
     )
 
     # ddpg(

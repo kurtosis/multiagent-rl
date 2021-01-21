@@ -168,7 +168,7 @@ def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     log_alpha = torch.tensor(np.log(alpha), requires_grad=True)
     # target_entropy = -torch.prod(torch.Tensor(env.action_space.shape)).item()
-    target_entropy = -8.0
+    target_entropy = -4.0
     alpha_optimizer = Adam([log_alpha], lr=a_lr)
 
     # Create actor-critic module and target networks
@@ -323,6 +323,7 @@ def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         # Ignore the "done" signal if it comes from hitting the time
         # horizon (that is, when it's an artificial terminal signal
         # that isn't based on the agent's state)
+        # *** HACK: Turn this off for now, we are not using max_ep_len this way
         d = False if ep_len==max_ep_len else d
 
         # Store experience to replay buffer

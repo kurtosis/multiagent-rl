@@ -270,7 +270,7 @@ class BoundedStochasticActor(nn.Module):
         self.log_sigma_min = log_sigma_min
         self.log_sigma_max = log_sigma_max
 
-    def forward(self, obs, deterministic=False, get_logprob=False):
+    def forward(self, obs, deterministic=False, get_logprob=True):
         shared = self.shared_net(obs)
         mu = self.mu_layer(shared)
         log_sigma = self.log_sigma_layer(shared)
@@ -287,6 +287,8 @@ class BoundedStochasticActor(nn.Module):
             logprob = pi.log_prob(act).sum(axis=-1)
             # Convert pdf due to tanh transform
             logprob -= (2 * (np.log(2) - act - F.softplus(-2 * act))).sum(axis=1)
+        else:
+            logprob = None
         act = torch.tanh(act)
         act = (act + 1) * self.act_width / 2 + self.act_low
         return act, logprob
@@ -555,7 +557,7 @@ class SACAgent(nn.Module):
     def act(self, obs, deterministic=False):
         """Return noisy action as numpy array, **without computing grads**"""
         with torch.no_grad():
-            act, _ = self.pi(obs, deterministic=deterministic)
+            act, _ = self.pi(obs, deterministic=deterministic, get_logprob=False)
         return act.numpy()
 
 

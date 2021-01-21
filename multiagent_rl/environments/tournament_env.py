@@ -95,9 +95,7 @@ class ConstantDualUltimatum(gym.Env):
         offer, demand = action
         if offer + EPS >= self.opponent_demand and self.opponent_offer + EPS >= demand:
             reward = (1 - offer) + self.opponent_offer
-            # reward = 1 - self.opponent_demand - np.abs(offer - self.opponent_demand)
         else:
-            # reward = 1 - self.opponent_demand - np.abs(offer - self.opponent_demand)
             reward = 0
         return reward
 
@@ -115,7 +113,7 @@ class ConstantDualUltimatum(gym.Env):
         if self.opponent_offer + EPS >= demand:
             reward += self.opponent_offer
         else:
-            reward += demand
+            reward += self.opponent_offer*(1-demand)/(1-self.opponent_offer)
             multiplier *= self.reward_penalty
         return multiplier * reward
 
@@ -148,7 +146,7 @@ class ConstantDualUltimatum(gym.Env):
         done = 0
         if self.current_turn == (self.ep_len - 1):
             done = 1
-            self.reset()
+            temp = self.reset()
         else:
             done = 0
             self.current_turn += 1
