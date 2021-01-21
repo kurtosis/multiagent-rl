@@ -95,12 +95,12 @@ def sac_new(
     logger.setup_pytorch_saver(agent)
 
     def compute_loss_pi(data):
-        o = data["obs"]
-        a, logprob_pi = agent.pi(o)
+        obs = data["obs"]
+        act, logprob_pi = agent.pi(obs)
         pi_info = dict(LogPi=logprob_pi.detach().numpy())
 
-        q1_pi = agent.q1(torch.cat([o, a], dim=-1))
-        q2_pi = agent.q2(torch.cat([o, a], dim=-1))
+        q1_pi = agent.q1(torch.cat([obs, act], dim=-1))
+        q2_pi = agent.q2(torch.cat([obs, act], dim=-1))
         q_pi = torch.min(q1_pi, q2_pi)
 
         loss_pi = (-q_pi + alpha * logprob_pi).mean()
@@ -109,7 +109,7 @@ def sac_new(
 
     # Set up function for computing td3 Q-loss
     def compute_loss_q(data):
-        o, a, r, obs_next, d = (
+        obs, act, rwd, obs_next, done = (
             data["obs"],
             data["act"],
             data["rew"],
@@ -117,18 +117,17 @@ def sac_new(
             data["done"],
         )
 
-        q1 = agent.q1(torch.cat([o, a], dim=-1))
-        q2 = agent.q2(torch.cat([o, a], dim=-1))
+        q1 = agent.q1(torch.cat([obs, act], dim=-1))
+        q2 = agent.q2(torch.cat([obs, act], dim=-1))
 
         # Bellman backup for Q function
         with torch.no_grad():
-            # d = d[torch.randperm(d.shape[0])]
             a_next, logprob_next = agent.pi(obs_next)
 
             q1_target = agent_target.q1(torch.cat([obs_next, a_next], dim=-1))
             q2_target = agent_target.q2(torch.cat([obs_next, a_next], dim=-1))
             q_target = torch.min(q1_target, q2_target)
-            backup = r + gamma * (1 - d) * (q_target - alpha * logprob_next)
+            backup = rwd + gamma * (1 - done) * (q_target - alpha * logprob_next)
 
         # MSE loss against Bellman backup
         loss_q = ((q1 - backup) ** 2).mean() + ((q2 - backup) ** 2).mean()
@@ -144,7 +143,7 @@ def sac_new(
     # batch_time = 0.0
 
     # def update(q_time, pi_time, target_time):
-    def update(i_step):
+    def update():
         # Get training data from buffer
         data = buf.sample_batch(batch_size)
 
@@ -185,8 +184,8 @@ def sac_new(
 
         # Update alpha
         if t_total >= update_alpha_after:
-            o = data["obs"]
-            pi, log_pi = agent.pi(o)
+            obs = data["obs"]
+            pi, log_pi = agent.pi(obs)
             loss_alpha = (log_alpha * (-log_pi - target_entropy).detach()).mean()
             alpha_optimizer.zero_grad()
             loss_alpha.backward()
@@ -196,19 +195,18 @@ def sac_new(
 
     def deterministic_policy_test():
         for _ in range(num_test_episodes):
-            o = test_env.reset()
+            obs = test_env.reset()
             ep_ret = 0
             ep_len = 0
-            d = False
-            while not d and not ep_len == max_episode_len:
-                # with torch.no_grad():
-                a = agent.act(
-                    torch.as_tensor(o, dtype=torch.float32), deterministic=True
+            done = False
+            while not done and not ep_len == max_episode_len:
+                act = agent.act(
+                    torch.as_tensor(obs, dtype=torch.float32), deterministic=True
                 )
-                o, r, d, _ = test_env.step(a)
-                ep_ret += r
+                obs, rwd, done, _ = test_env.step(act)
+                ep_ret += rwd
                 ep_len += 1
-                logger.store(TestActOffer=a[0], TestActDemand=a[1])
+                logger.store(TestActOffer=act[0], TestActDemand=act[1])
             logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
 
     start_time = time.time()
@@ -228,17 +226,13 @@ def sac_new(
                 act = agent.act(torch.as_tensor(obs, dtype=torch.float32))
             logger.store(ActOffer=act[0], ActDemand=act[1])
             # Step environment given latest agent action
-            obs_next, reward, done, _ = env.step(act)
+            obs_next, rwd, done, _ = env.step(act)
 
-            # if done==1:
-            #     if reward>1e-8:
-            #         print(f'reward {reward} ; act {act}')
-
-            episode_return += reward
+            episode_return += rwd
             episode_length += 1
 
             # Store current step in buffer
-            buf.store(obs, act, reward, obs_next, done)
+            buf.store(obs, act, rwd, obs_next, done)
 
             # update episode return and env state
             obs = obs_next
@@ -248,8 +242,7 @@ def sac_new(
             epoch_ended = t == steps_per_epoch - 1
             end_episode = done or episode_capped or epoch_ended
             if end_episode:
-                # episode_count += 1
-                if done or episode_capped:
+                if done:
                     logger.store(EpRet=episode_return, EpLen=episode_length)
                 obs = env.reset()
                 episode_return = 0
@@ -258,12 +251,9 @@ def sac_new(
             if t_total >= update_after and t_total % update_every == 0:
                 update_start = time.time()
                 for i in range(update_every):
-                    update(i)
+                    update()
                     alpha = log_alpha.exp()
 
-                data = buf.sample_batch(batch_size)
-                eval_done(agent, agent_target, data, gamma, alpha, q_lr)
-                # print(f"{t}: alpha {alpha}")
                 # q_time, pi_time, target_time = update(q_time, pi_time, target_time)
                 # n_updates += 1
                 # update_end = time.time()

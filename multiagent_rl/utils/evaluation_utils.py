@@ -161,7 +161,7 @@ def check_q_backup():
     print(ff)
 
 def eval_done(agent, agent_target, data, gamma, alpha, q_lr, n=101):
-        o, a, r, obs_next, d = (
+    obs, act, rwd, obs_next, done = (
             data["obs"],
             data["act"],
             data["rew"],
@@ -173,10 +173,10 @@ def eval_done(agent, agent_target, data, gamma, alpha, q_lr, n=101):
         qa_params = chain(agent_a.q1.parameters(), agent_a.q2.parameters())
         qa_optimizer = Adam(qa_params, lr=q_lr)
 
-        # d = torch.zeros_like(d)
+        # done = torch.zeros_like(done)
 
-        q1 = agent_a.q1(torch.cat([o, a], dim=-1))
-        q2 = agent_a.q2(torch.cat([o, a], dim=-1))
+        q1 = agent_a.q1(torch.cat([obs, act], dim=-1))
+        q2 = agent_a.q2(torch.cat([obs, act], dim=-1))
 
         # Bellman backup for Q function
         with torch.no_grad():
@@ -185,7 +185,7 @@ def eval_done(agent, agent_target, data, gamma, alpha, q_lr, n=101):
             q1_target = agent_target.q1(torch.cat([obs_next, a_next], dim=-1))
             q2_target = agent_target.q2(torch.cat([obs_next, a_next], dim=-1))
             q_target = torch.min(q1_target, q2_target)
-            backup = r + gamma * (1 - d) * (q_target - alpha * logprob_next)
+            backup = rwd + gamma * (1 - done) * (q_target - alpha * logprob_next)
 
         # MSE loss against Bellman backup
         loss_qa = ((q1 - backup) ** 2).mean() + ((q2 - backup) ** 2).mean()
@@ -198,6 +198,6 @@ def eval_done(agent, agent_target, data, gamma, alpha, q_lr, n=101):
         a0, a1 = np.meshgrid(grid, grid)
         a0 = a0.reshape(-1)
         a1 = a1.reshape(-1)
-        a = torch.tensor(np.stack((a0, a1), axis=1), dtype=torch.float32)
-        o = torch.tensor([0, 0, 0, 0, 0], dtype=torch.float32)
-        o = o.repeat(a.shape[0], 1)
+        act = torch.tensor(np.stack((a0, a1), axis=1), dtype=torch.float32)
+        obs = torch.tensor([0, 0, 0, 0, 0], dtype=torch.float32)
+        obs = obs.repeat(act.shape[0], 1)
