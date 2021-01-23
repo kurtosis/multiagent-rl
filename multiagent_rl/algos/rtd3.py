@@ -123,7 +123,6 @@ def rtd3(
             # q_target = r
         return q_target
 
-
     def compute_loss_q(data, backup):
         o, a = data["obs"], data["act"]
         q1 = agent.q1(torch.cat([o, a], dim=-1))

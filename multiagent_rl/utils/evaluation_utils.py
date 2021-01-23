@@ -138,7 +138,6 @@ def save_q_map(q, filename, step, n=101):
     o = o.repeat(a.shape[0], 1)
     with torch.no_grad():
         q_estim = q(torch.cat([o, a], dim=-1))
-        # q_estim = q(o, a)
     result = torch.cat([o, a, q_estim.unsqueeze(dim=1)], dim=1)
     cols = (
         [f"o_{i}" for i in range(o.shape[-1])]

@@ -147,6 +147,75 @@ class LSTMDeterministicActor(nn.Module):
         self.c = torch.zeros_like(self.c)
 
 
+class LSTMStochasticActor(nn.Module):
+    """
+    Produces a squashed Normal distribution for one var from a MLP for mu and sigma.
+    """
+
+    def __init__(
+        self,
+        input_size,
+        hidden_size,
+        act_dim,
+        act_low,
+        act_high,
+        activation=nn.ReLU,
+        log_sigma_min=-20,
+        log_sigma_max=2,
+    ):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.act_low = torch.as_tensor(act_low)
+        self.act_width = torch.as_tensor(act_high - act_low)
+        self.lstm = nn.LSTM(input_size, hidden_size)
+        self.mu_layer = nn.Linear(hidden_size, act_dim, activation)
+        self.log_sigma_layer = nn.Linear(hidden_size, act_dim, activation)
+        self.h = torch.zeros((1, 1, self.hidden_size))
+        self.c = torch.zeros((1, 1, self.hidden_size))
+        self.log_sigma_min = log_sigma_min
+        self.log_sigma_max = log_sigma_max
+
+    def forward(self, input, deterministic=False, get_logprob=True):
+        """The Agent must distinguish between generating actions sequentially (and maintaining hidden
+         state) and training on a batch of trajectories."""
+        if len(input.shape) == 3:
+            batch_size = input.shape[1]
+            h = torch.zeros((1, batch_size, self.hidden_size))
+            c = torch.zeros((1, batch_size, self.hidden_size))
+            lstm_out, _ = self.lstm(input, (h, c))
+        else:
+            # TODO: what should the input dims be exactly? Are there edge cases?
+            lstm_out, (h, c) = self.lstm(
+                input.view(-1, 1, len(input)), (self.h, self.c)
+            )
+            self.h, self.c = h, c
+
+        mu = self.mu_layer(lstm_out)
+        log_sigma = self.log_sigma_layer(lstm_out)
+        log_sigma = torch.clamp(log_sigma, self.log_sigma_min, self.log_sigma_max)
+        sigma = torch.exp(log_sigma)
+        pi = Normal(mu, sigma)
+        if deterministic:
+            # For evaluating performance at end of epoch, not for data collection
+            act = mu
+        else:
+            act = pi.rsample()
+        if get_logprob:
+            logprob = pi.log_prob(act).sum(axis=-1)
+            # Convert pdf due to tanh transform
+            # TODO: make sure axis=-1 is right
+            logprob -= (2 * (np.log(2) - act - F.softplus(-2 * act))).sum(axis=-1)
+        else:
+            logprob = None
+        act = torch.tanh(act)
+        act = (act + 1) * self.act_width / 2 + self.act_low
+        return act, logprob
+
+    def reset_state(self):
+        self.h = torch.zeros_like(self.h)
+        self.c = torch.zeros_like(self.c)
+
+
 class LSTMEstimator(nn.Module):
     """
     LSTM for V(obs) or Q(obs, act)
@@ -188,6 +257,7 @@ class LSTMEstimator(nn.Module):
             )
             self.h, self.c = h, c
         value = self.value_mlp(lstm_out)
+        value = value.squeeze()
         if value_only:
             return value
         else:
@@ -286,7 +356,9 @@ class BoundedStochasticActor(nn.Module):
         if get_logprob:
             logprob = pi.log_prob(act).sum(axis=-1)
             # Convert pdf due to tanh transform
-            logprob -= (2 * (np.log(2) - act - F.softplus(-2 * act))).sum(axis=1)
+            # Changed sum axis to work with RDPGBuffer. Need to ensure this is correct.
+            # logprob -= (2 * (np.log(2) - act - F.softplus(-2 * act))).sum(axis=1)
+            logprob -= (2 * (np.log(2) - act - F.softplus(-2 * act))).sum(axis=-1)
         else:
             logprob = None
         act = torch.tanh(act)
@@ -346,7 +418,7 @@ class DDPGAgent(nn.Module):
 
     def __init__(
         self,
-        observation_space=None,
+        obs_space=None,
         action_space=None,
         obs_dim=None,
         hidden_layers_mu=(256, 256),
@@ -362,7 +434,7 @@ class DDPGAgent(nn.Module):
     ):
         super().__init__()
         if obs_dim is None:
-            obs_dim = observation_space.shape[0]
+            obs_dim = obs_space.shape[0]
         self.act_dim = action_space.shape[0]
         self.act_low = action_space.low
         self.act_high = action_space.high
@@ -470,7 +542,7 @@ class TD3Agent(nn.Module):
 
     def __init__(
         self,
-        observation_space,
+        obs_space,
         action_space,
         hidden_layers_mu=(256, 256),
         hidden_layers_q=(256, 256),
@@ -480,7 +552,7 @@ class TD3Agent(nn.Module):
         **kwargs
     ):
         super().__init__()
-        obs_dim = observation_space.shape[0]
+        obs_dim = obs_space.shape[0]
         act_dim = action_space.shape[0]
         self.act_dim = action_space.shape[0]
         self.act_low = action_space.low
@@ -528,7 +600,7 @@ class SACAgent(nn.Module):
 
     def __init__(
         self,
-        observation_space,
+        obs_space,
         action_space,
         hidden_layers_pi=(256, 256),
         hidden_layers_q=(256, 256),
@@ -536,7 +608,7 @@ class SACAgent(nn.Module):
         **kwargs
     ):
         super().__init__()
-        obs_dim = observation_space.shape[0]
+        obs_dim = obs_space.shape[0]
         act_dim = action_space.shape[0]
         layer_sizes_pi = [obs_dim] + list(hidden_layers_pi)
         layer_sizes_q = [obs_dim + act_dim] + list(hidden_layers_q) + [1]
@@ -572,9 +644,9 @@ class RDPGAgent(nn.Module):
 
     def __init__(
         self,
-        obs_dim=None,
         obs_space=None,
         action_space=None,
+        obs_dim=None,
         hidden_size=64,
         noise_std=0.1,
         pi_lr=1e-3,
@@ -693,3 +765,65 @@ class RDPGAgent(nn.Module):
     def reset_state(self):
         self.pi.reset_state()
         self.q.reset_state()
+
+
+class RSACAgent(nn.Module):
+    """
+    Recurrent (LSTM) Agent to be used in SAC.
+    Contains:
+    - stochastic policy (bounded by tanh)
+    - estimated Q*(s,a,)
+    """
+
+    def __init__(
+        self,
+        obs_space,
+        action_space,
+        hidden_size_pi=256,
+        hidden_size_q=256,
+        activation=nn.ReLU,
+        **kwargs
+    ):
+        super().__init__()
+        self.obs_dim = obs_space.shape[0]
+        self.act_dim = action_space.shape[0]
+        # layer_sizes_pi = [obs_dim] + list(hidden_layers_pi)
+        # layer_sizes_q = [obs_dim + act_dim] + list(hidden_layers_q) + [1]
+
+        self.pi = LSTMStochasticActor(
+            self.obs_dim,
+            hidden_size_pi,
+            self.act_dim,
+            action_space.low,
+            action_space.high,
+            activation=activation,
+        )
+        self.q1 = LSTMEstimator(
+            input_size=self.obs_dim + self.act_dim,
+            hidden_size=hidden_size_q,
+            action_size=self.act_dim,
+        )
+        self.q2 = LSTMEstimator(
+            input_size=self.obs_dim + self.act_dim,
+            hidden_size=hidden_size_q,
+            action_size=self.act_dim,
+        )
+        # self.q1 = ContinuousEstimator(
+        #     layer_sizes=layer_sizes_q, activation=activation, **kwargs
+        # )
+        # self.q2 = ContinuousEstimator(
+        #     layer_sizes=layer_sizes_q, activation=activation, **kwargs
+        # )
+
+    def act(self, obs, deterministic=False):
+        """Return noisy action as numpy array, **without computing grads**"""
+        with torch.no_grad():
+            act, _ = self.pi(obs, deterministic=deterministic, get_logprob=False)
+            act = act.numpy()
+            act = np.squeeze(act, (0, 1))
+        return act
+
+    def reset_state(self):
+        self.pi.reset_state()
+        self.q1.reset_state()
+        self.q2.reset_state()

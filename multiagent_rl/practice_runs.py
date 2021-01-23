@@ -9,9 +9,10 @@
 
 # from multiagent_rl.algos.ddpg import *
 
-# from multiagent_rl.algos.rdpg import *
+from multiagent_rl.algos.rdpg import *
 # from multiagent_rl.algos.td3 import *
 from multiagent_rl.algos.sac import *
+from multiagent_rl.algos.rsac import *
 
 # from multiagent_rl.algos.rtd3 import *
 
@@ -57,6 +58,35 @@ n_runs = 5
 seed = 1
 for i in range(n_runs):
     seed += 1
+    rsac(
+        seed=seed,
+        steps_per_epoch=200,
+        epochs=epochs,
+        pi_lr=pi_lr,
+        q_lr=q_lr,
+        a_lr=a_lr,
+        batch_size=100,
+        start_steps=start_steps,
+        update_after=update_after,
+        update_every=update_every,
+        save_freq=save_freq,
+        num_test_episodes=test_episodes,
+        max_episode_len=ep_len,
+        env_fn=ConstantDualUltimatum,
+        env_kwargs={"ep_len": ep_len},
+        agent_fn=RSACAgent,
+        agent_kwargs={"hidden_size_pi": 8, "hidden_size_q": 8},
+        gamma=0.99,
+        alpha=0.05,
+        update_alpha_after=15000,
+        target_entropy=-8.0,
+        logger_kwargs={
+            "output_dir": "~/research/multiagent-rl/data/testing/constantbot/rsac/",
+            "exp_name": "standard",
+        },
+        q_filename="~/research/multiagent-rl/data/q_rsac",
+        save_q_every=5000,
+    )
 
     # sac(
     #     seed=seed,
@@ -76,7 +106,7 @@ for i in range(n_runs):
     #     ac_kwargs={"hidden_sizes": (32, 32)},
     #     env_fn=ConstantDualUltimatum,
     #     logger_kwargs={
-    #         "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/sac_orig/",
+    #         "output_dir": "~/research/multiagent-rl/data/testing/constantbot/sac_orig/",
     #         "exp_name": "done_auto_alpha_targ_4",
     #     },
     #     alpha=0.05,
@@ -99,7 +129,7 @@ for i in range(n_runs):
     #     agent_kwargs={"hidden_layers_pi": (32, 32), "hidden_layers_q": (32, 32)},
     #     env_fn=ConstantDualUltimatum,
     #     logger_kwargs={
-    #         "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/sac/",
+    #         "output_dir": "~/research/multiagent-rl/data/testing/constantbot/sac/",
     #         "exp_name": "gamma_50_alpha_05_targ_4",
     #     },
     #     gamma=0.5,
@@ -124,7 +154,7 @@ for i in range(n_runs):
     #     agent_kwargs={"hidden_layers_pi": (32, 32), "hidden_layers_q": (32, 32)},
     #     env_fn=ConstantDualUltimatum,
     #     logger_kwargs={
-    #         "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/sac/",
+    #         "output_dir": "~/research/multiagent-rl/data/testing/constantbot/sac/",
     #         "exp_name": "gamma_90_alpha_05_targ_4",
     #     },
     #     gamma=0.9,
@@ -132,33 +162,33 @@ for i in range(n_runs):
     #     target_entropy = -4.0,
     # )
 
-    sac(
-        seed=seed,
-        steps_per_epoch=steps_per_epoch,
-        epochs=epochs,
-        pi_lr=pi_lr,
-        q_lr=q_lr,
-        a_lr=a_lr,
-        batch_size=batch_size,
-        start_steps=start_steps,
-        update_after=update_after,
-        update_every=update_every,
-        save_freq=save_freq,
-        num_test_episodes=test_episodes,
-        max_episode_len=ep_len,
-        agent_kwargs={"hidden_layers_pi": (32, 32), "hidden_layers_q": (32, 32)},
-        env_fn=ConstantDualUltimatum,
-        logger_kwargs={
-            "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/sac/",
-            "exp_name": "alpha_8_new_buf",
-        },
-        gamma=0.99,
-        alpha=0.05,
-        update_alpha_after=15000,
-        target_entropy=-8.0,
-        q_filename="/Users/kurtsmith/research/multiagent-rl/data/q_alpha_8",
-        save_q_every=5000,
-    )
+    # sac(
+    #     seed=seed,
+    #     steps_per_epoch=steps_per_epoch,
+    #     epochs=epochs,
+    #     pi_lr=pi_lr,
+    #     q_lr=q_lr,
+    #     a_lr=a_lr,
+    #     batch_size=batch_size,
+    #     start_steps=start_steps,
+    #     update_after=update_after,
+    #     update_every=update_every,
+    #     save_freq=save_freq,
+    #     num_test_episodes=test_episodes,
+    #     max_episode_len=ep_len,
+    #     agent_kwargs={"hidden_layers_pi": (32, 32), "hidden_layers_q": (32, 32)},
+    #     env_fn=ConstantDualUltimatum,
+    #     logger_kwargs={
+    #         "output_dir": "~/research/multiagent-rl/data/testing/constantbot/sac/",
+    #         "exp_name": "alpha_8_new_buf",
+    #     },
+    #     gamma=0.99,
+    #     alpha=0.05,
+    #     update_alpha_after=15000,
+    #     target_entropy=-8.0,
+    #     q_filename="~/research/multiagent-rl/data/q_alpha_8",
+    #     save_q_every=5000,
+    # )
 
     # ddpg(
     #     seed=seed,
@@ -180,7 +210,7 @@ for i in range(n_runs):
     #     env_fn=ConstantDualUltimatum,
     #     # env_kwargs=env_kwargs,
     #     logger_kwargs={
-    #         # "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/ddpg_orig/",
+    #         # "output_dir": "~/research/multiagent-rl/data/testing/constantbot/ddpg_orig/",
     #         # "exp_name": "long_start",
     #     },
     # )
@@ -204,7 +234,7 @@ for i in range(n_runs):
     #     env_fn=ConstantDualUltimatum,
     #     env_kwargs=env_kwargs,
     #     logger_kwargs={
-    #         "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/ddpg/",
+    #         "output_dir": "~/research/multiagent-rl/data/testing/constantbot/ddpg/",
     #         "exp_name": "temp",
     #     },
     # )
@@ -216,20 +246,20 @@ for i in range(n_runs):
     #     pi_lr=pi_lr,
     #     q_lr=q_lr,
     #     batch_size=batch_size_eps,
-    #     start_steps=start_steps,
+    #     start_steps=1,
     #     update_after=update_after,
     #     update_every=update_every,
     #     test_episodes=test_episodes,
     #     max_episode_len=ep_len,
     #     save_freq=save_freq,
-    #     agent_fn=DDPGAgent,
+    #     agent_fn=RDPGAgent,
     #     gamma=gamma,
     #     agent_kwargs={"hidden_layers_mu": (4, 4), "hidden_layers_q": (32, 32, 32, 32)},
     #     env_fn=ConstantDualUltimatum,
     #     env_kwargs=env_kwargs,
     #     logger_kwargs={
-    #         "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/rdpg/",
-    #         "exp_name": "q_32x4",
+    #         "output_dir": "~/research/multiagent-rl/data/testing/constantbot/rdpg/",
+    #         "exp_name": "temp",
     #     },
     # )
 
@@ -251,7 +281,7 @@ for i in range(n_runs):
     #     ac_kwargs={"hidden_sizes": (32, 32,)},
     #     env_fn=ConstantDualUltimatum,
     #     logger_kwargs={
-    #         "output_dir": "/Users/kurtsmith/research/multiagent-rl/data/testing/constantbot/td3_orig/",
+    #         "output_dir": "~/research/multiagent-rl/data/testing/constantbot/td3_orig/",
     #         "exp_name": "non_flat_reward",
     #     },
     # )

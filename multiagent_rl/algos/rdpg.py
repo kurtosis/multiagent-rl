@@ -53,7 +53,7 @@ def rdpg(
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape
     agent = agent_fn(
-        observation_space=env.observation_space, action_space=env.action_space, **agent_kwargs
+        obs_space=env.observation_space, action_space=env.action_space, **agent_kwargs
     )
     agent_target = deepcopy(agent)
 
@@ -182,6 +182,7 @@ def rdpg(
         pass
         for t in range(steps_per_epoch):
             # Take random actions for first n steps to do broad exploration
+            print(f't {t} ; total {t_total}')
             if t_total < start_steps:
                 act = env.action_space.sample()
             else:
