@@ -255,6 +255,10 @@ def rsac(
             # check if episode is over
             if done:
                 logger.store(EpRet=episode_return, EpLen=episode_length)
+                obs = env.reset()
+                agent.reset_state()
+                episode_return = 0
+                episode_length = 0
 
             if t_total >= update_after and t_total % update_every == 0:
                 update_start = time.time()

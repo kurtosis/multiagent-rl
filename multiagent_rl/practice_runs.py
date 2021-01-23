@@ -10,6 +10,7 @@
 # from multiagent_rl.algos.ddpg import *
 
 from multiagent_rl.algos.rdpg import *
+
 # from multiagent_rl.algos.td3 import *
 from multiagent_rl.algos.sac import *
 from multiagent_rl.algos.rsac import *
@@ -70,21 +71,26 @@ for i in range(n_runs):
         update_after=update_after,
         update_every=update_every,
         save_freq=save_freq,
-        num_test_episodes=test_episodes,
+        num_test_episodes=100,
         max_episode_len=ep_len,
         env_fn=ConstantDualUltimatum,
-        env_kwargs={"ep_len": ep_len},
+        env_kwargs={"ep_len": ep_len, "fixed": False},
         agent_fn=RSACAgent,
-        agent_kwargs={"hidden_size_pi": 8, "hidden_size_q": 8},
+        agent_kwargs={
+            "hidden_size_pi": 8,
+            "hidden_size_q": 8,
+            "mlp_layers_pi": (32, 32),
+            "mlp_layers_q": (32, 32, 32),
+        },
         gamma=0.99,
         alpha=0.05,
         update_alpha_after=15000,
         target_entropy=-8.0,
         logger_kwargs={
             "output_dir": "~/research/multiagent-rl/data/testing/constantbot/rsac/",
-            "exp_name": "standard",
+            "exp_name": "nonfixed",
         },
-        q_filename="~/research/multiagent-rl/data/q_rsac",
+        q_filename="~/research/multiagent-rl/data/q_maps/nonfixed",
         save_q_every=5000,
     )
 

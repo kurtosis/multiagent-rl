@@ -78,6 +78,9 @@ class ContinuousEstimator(nn.Module):
         output = self.net(x)
         return torch.squeeze(output, -1)  # Critical to ensure v has right shape.
 
+    def reset_state(self):
+        pass
+
 
 class BoundedDeterministicActor(nn.Module):
     """
@@ -156,6 +159,7 @@ class LSTMStochasticActor(nn.Module):
         self,
         input_size,
         hidden_size,
+        layer_sizes,
         act_dim,
         act_low,
         act_high,
@@ -168,8 +172,9 @@ class LSTMStochasticActor(nn.Module):
         self.act_low = torch.as_tensor(act_low)
         self.act_width = torch.as_tensor(act_high - act_low)
         self.lstm = nn.LSTM(input_size, hidden_size)
-        self.mu_layer = nn.Linear(hidden_size, act_dim, activation)
-        self.log_sigma_layer = nn.Linear(hidden_size, act_dim, activation)
+        self.shared_mlp = mlp(layer_sizes, activation, activation)
+        self.mu_layer = nn.Linear(layer_sizes[-1], act_dim)
+        self.log_sigma_layer = nn.Linear(layer_sizes[-1], act_dim)
         self.h = torch.zeros((1, 1, self.hidden_size))
         self.c = torch.zeros((1, 1, self.hidden_size))
         self.log_sigma_min = log_sigma_min
@@ -189,9 +194,9 @@ class LSTMStochasticActor(nn.Module):
                 input.view(-1, 1, len(input)), (self.h, self.c)
             )
             self.h, self.c = h, c
-
-        mu = self.mu_layer(lstm_out)
-        log_sigma = self.log_sigma_layer(lstm_out)
+        shared = self.shared_mlp(lstm_out)
+        mu = self.mu_layer(shared)
+        log_sigma = self.log_sigma_layer(shared)
         log_sigma = torch.clamp(log_sigma, self.log_sigma_min, self.log_sigma_max)
         sigma = torch.exp(log_sigma)
         pi = Normal(mu, sigma)
@@ -225,21 +230,20 @@ class LSTMEstimator(nn.Module):
     Output dimension: layer_sizes[-1] (should be 1 for V,Q)
     """
 
-    # def __init__(self, layer_sizes, activation, low, high, **kwargs):
     def __init__(
         self,
         input_size,
         hidden_size,
+        layer_sizes,
         activation=nn.ReLU,
         final_activation=nn.Identity,
         **kwargs
     ):
-        # def __init__(self, layer_sizes, activation, final_activation=nn.Identity, **kwargs):
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.lstm = nn.LSTM(input_size, hidden_size)
-        self.value_mlp = mlp([hidden_size, 1], activation, final_activation)
+        self.value_mlp = mlp(layer_sizes, activation, final_activation)
         self.h = torch.zeros((1, 1, self.hidden_size))
         self.c = torch.zeros((1, 1, self.hidden_size))
 
@@ -335,8 +339,8 @@ class BoundedStochasticActor(nn.Module):
         self.act_low = torch.as_tensor(act_low)
         self.act_width = torch.as_tensor(act_high - act_low)
         self.shared_net = mlp(layer_sizes, activation, activation)
-        self.mu_layer = nn.Linear(layer_sizes[-1], act_dim, activation)
-        self.log_sigma_layer = nn.Linear(layer_sizes[-1], act_dim, activation)
+        self.mu_layer = nn.Linear(layer_sizes[-1], act_dim)
+        self.log_sigma_layer = nn.Linear(layer_sizes[-1], act_dim)
         self.log_sigma_min = log_sigma_min
         self.log_sigma_max = log_sigma_max
 
@@ -633,6 +637,9 @@ class SACAgent(nn.Module):
             act, _ = self.pi(obs, deterministic=deterministic, get_logprob=False)
         return act.numpy()
 
+    def reset_state(self):
+        pass
+
 
 class RDPGAgent(nn.Module):
     """
@@ -781,18 +788,21 @@ class RSACAgent(nn.Module):
         action_space,
         hidden_size_pi=256,
         hidden_size_q=256,
+        mlp_layers_pi=(256, 256),
+        mlp_layers_q=(256, 256),
         activation=nn.ReLU,
         **kwargs
     ):
         super().__init__()
         self.obs_dim = obs_space.shape[0]
         self.act_dim = action_space.shape[0]
-        # layer_sizes_pi = [obs_dim] + list(hidden_layers_pi)
-        # layer_sizes_q = [obs_dim + act_dim] + list(hidden_layers_q) + [1]
+        layer_sizes_pi = [hidden_size_pi] + list(mlp_layers_pi)
+        layer_sizes_q = [hidden_size_q] + list(mlp_layers_q) + [1]
 
         self.pi = LSTMStochasticActor(
             self.obs_dim,
             hidden_size_pi,
+            layer_sizes_pi,
             self.act_dim,
             action_space.low,
             action_space.high,
@@ -801,19 +811,13 @@ class RSACAgent(nn.Module):
         self.q1 = LSTMEstimator(
             input_size=self.obs_dim + self.act_dim,
             hidden_size=hidden_size_q,
-            action_size=self.act_dim,
+            layer_sizes=layer_sizes_q,
         )
         self.q2 = LSTMEstimator(
             input_size=self.obs_dim + self.act_dim,
             hidden_size=hidden_size_q,
-            action_size=self.act_dim,
+            layer_sizes=layer_sizes_q,
         )
-        # self.q1 = ContinuousEstimator(
-        #     layer_sizes=layer_sizes_q, activation=activation, **kwargs
-        # )
-        # self.q2 = ContinuousEstimator(
-        #     layer_sizes=layer_sizes_q, activation=activation, **kwargs
-        # )
 
     def act(self, obs, deterministic=False):
         """Return noisy action as numpy array, **without computing grads**"""

@@ -50,8 +50,8 @@ class ConstantDualUltimatum(gym.Env):
         self,
         ep_len=10,
         reward="ultimatum",
-        opponent_offer=0.3,
-        opponent_demand=0.9,
+        opponent_offer=None,
+        opponent_demand=None,
         fixed=True,
         reward_penalty=0.01,
     ):
@@ -141,9 +141,6 @@ class ConstantDualUltimatum(gym.Env):
         obs = np.array(
             [self.opponent_offer, self.opponent_demand, action[0], action[1], 0]
         )
-        # HACK - don't change obs
-        obs = np.zeros_like(obs)
-        done = 0
         if self.current_turn == (self.ep_len - 1):
             done = 1
             temp = self.reset()
@@ -159,8 +156,6 @@ class ConstantDualUltimatum(gym.Env):
             self.opponent_demand = np.random.rand()
         # Create init state obs, with flag indicating this is the first step
         obs = np.array([self.opponent_offer, self.opponent_demand, 0, 0, 1])
-        # HACK - don't change obs
-        obs = np.zeros_like(obs)
         return obs
 
     def render(self, mode="human"):
@@ -171,7 +166,7 @@ class StaticDualUltimatum(gym.Env):
     """A single-agent environment consisting of a 'dual ultimatum' game against a StaticDistribBot"""
 
     def __init__(
-        self, reward="ultimatum", opponent_offer=0.5, opponent_demand=0.5, fixed=False
+        self, reward="ultimatum", opponent_offer=None, opponent_demand=None, fixed=False
     ):
         super(StaticDualUltimatum, self).__init__()
         self.fixed = fixed
