@@ -1,7 +1,7 @@
 from textwrap import dedent
 
 from multiagent_rl.algos.tournament_ddpg import *
-from multiagent_rl.algos.ultimatum_agents import *
+from multiagent_rl.algos.bot_agents import *
 from multiagent_rl.environments.tournament_env import *
 
 from multiagent_rl.user_config import (

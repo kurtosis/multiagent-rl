@@ -73,7 +73,7 @@ for i in range(n_runs):
         save_freq=save_freq,
         num_test_episodes=100,
         max_episode_len=ep_len,
-        env_fn=ConstantDualUltimatum,
+        env_fn=DistribDualUltimatum,
         env_kwargs={"ep_len": ep_len, "fixed": False},
         agent_fn=RSACAgent,
         agent_kwargs={
@@ -88,9 +88,9 @@ for i in range(n_runs):
         target_entropy=-8.0,
         logger_kwargs={
             "output_dir": "~/research/multiagent-rl/data/testing/constantbot/rsac/",
-            "exp_name": "nonfixed",
+            "exp_name": "distrib_2",
         },
-        q_filename="~/research/multiagent-rl/data/q_maps/nonfixed",
+        q_filename="~/research/multiagent-rl/data/q_maps/distrib_2",
         save_q_every=5000,
     )
 

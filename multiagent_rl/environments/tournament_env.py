@@ -9,6 +9,9 @@ import torch
 import gym
 from gym import spaces
 
+from multiagent_rl.algos.bot_agents import *
+
+
 EPS = 1e-8
 
 
@@ -113,7 +116,7 @@ class ConstantDualUltimatum(gym.Env):
         if self.opponent_offer + EPS >= demand:
             reward += self.opponent_offer
         else:
-            reward += self.opponent_offer*(1-demand)/(1-self.opponent_offer)
+            reward += self.opponent_offer * (1 - demand) / (1 - self.opponent_offer)
             multiplier *= self.reward_penalty
         return multiplier * reward
 
@@ -162,81 +165,85 @@ class ConstantDualUltimatum(gym.Env):
         pass
 
 
-class StaticDualUltimatum(gym.Env):
+class DistribDualUltimatum(gym.Env):
     """A single-agent environment consisting of a 'dual ultimatum' game against a StaticDistribBot"""
 
     def __init__(
-        self, reward="ultimatum", opponent_offer=None, opponent_demand=None, fixed=False
+        self,
+        ep_len=10,
+        opponent_offer_mean=None,
+        opponent_demand_mean=None,
+        opponent_offer_std=None,
+        opponent_demand_std=None,
+        fixed=False,
     ):
-        super(StaticDualUltimatum, self).__init__()
+        super(DistribDualUltimatum, self).__init__()
+        self.ep_len = ep_len
+        self.current_turn = 0
         self.fixed = fixed
-        self.opponent_offer = opponent_offer
-        self.opponent_demand = opponent_demand
-        self.action_space = spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32)
-        self.observation_space = spaces.Tuple(
-            (
-                spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32),
-                spaces.Discrete(2),
-            )
-        )
-        if reward == "l2":
-            self.rewards = self._l2_rewards
-        elif reward == "l1":
-            self.rewards = self._l1_rewards
-        elif reward == "l1_const":
-            self.rewards = self._l1_const_rewards
-        else:
-            self.rewards = self._ultimatum_rewards
 
-    def _ultimatum_rewards(self, action):
+        # Sample mean from uniform dist
+        if opponent_offer_mean is None:
+            opponent_offer_mean = np.random.rand()
+        if opponent_demand_mean is None:
+            opponent_demand_mean = np.random.rand()
+
+        # Sample std from uniform dist
+        if opponent_offer_std is None:
+            opponent_offer_std = np.random.rand()
+        if opponent_demand_std is None:
+            opponent_demand_std = np.random.rand()
+
+        self.opponent = StaticDistribBot(
+            mean_offer=opponent_offer_mean,
+            std_offer=opponent_offer_std,
+            mean_demand=opponent_demand_mean,
+            std_demand=opponent_demand_std,
+        )
+
+        self.action_space = spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32)
+        self.observation_space = spaces.Box(
+            low=0.0, high=1.0, shape=(5,), dtype=np.float32
+        )
+        self.rewards = self._ultimatum_rewards
+
+    def _ultimatum_rewards(self, action, opp_action):
         offer, demand = action
-        if offer + EPS >= self.opponent_demand and self.opponent_offer + EPS >= demand:
-            reward = (1 - offer) + self.opponent_offer
+        opponent_offer, opponent_demand = opp_action
+        if offer + EPS >= opponent_demand and opponent_offer + EPS >= demand:
+            reward = (1 - offer) + opponent_offer
         else:
             reward = 0
         return reward
 
-    def _l1_rewards(self, action):
-        """Simple reward for testing"""
-        offer_0, _ = action
-        l1 = -np.abs(offer_0 - self.opponent_offer)
-        rewards = np.array([l1, l1])
-        return rewards
+    def step(self, action):
+        opp_action = self.opponent.act()
+        rewards = self.rewards(action, opp_action)
+        obs = np.concatenate((opp_action, action, [0]))
+        if self.current_turn == (self.ep_len - 1):
+            done = 1
+            _ = self.reset()
+        else:
+            done = 0
+            self.current_turn += 1
 
-    def _l2_rewards(self, actions):
-        """Simple reward for testing"""
-        offer_0, _ = actions[0, :]
-        offer_1, _ = actions[1, :]
-        l2 = -((offer_0 - offer_1) ** 2)
-        rewards = np.array([l2, l2])
-        return rewards
-
-    def _l1_const_rewards(self, actions, target=0.3):
-        """Simple reward for testing"""
-        offer_0, _ = actions[0, :]
-        offer_1, _ = actions[1, :]
-        r_0 = -np.abs(offer_0 - target)
-        r_1 = -np.abs(offer_1 - target)
-        rewards = np.array([r_0, r_1])
-        return rewards
-
-    def step(self, actions):
-        rewards = self.rewards(actions)
-        obs = np.array(
-            [
-                np.concatenate((actions[0, :], actions[1, :])),
-                np.concatenate((actions[1, :], actions[0, :])),
-            ]
-        )
-        # Add flag indicating this is not the first step
-        obs = np.concatenate((obs, np.zeros((2, 1))), axis=1)
-        done = False
         return obs, rewards, done, {}
 
     def reset(self):
+        self.current_turn = 0
+        if not self.fixed:
+            opponent_offer_mean = np.random.rand()
+            opponent_offer_std = np.random.rand()
+            opponent_demand_mean = np.random.rand()
+            opponent_demand_std = np.random.rand()
+            self.opponent = StaticDistribBot(
+                mean_offer=opponent_offer_mean,
+                std_offer=opponent_offer_std,
+                mean_demand=opponent_demand_mean,
+                std_demand=opponent_demand_std,
+            )
         # Create init state obs, with flag indicating this is the first step
-        obs = np.zeros((2, 5))
-        obs[:, -1] = 1
+        obs = np.array([0, 0, 0, 0, 1])
         return obs
 
     def render(self, mode="human"):
@@ -248,6 +255,7 @@ class DualUltimatum(gym.Env):
 
     def __init__(self, reward="ultimatum"):
         super(DualUltimatum, self).__init__()
+
         self.action_space = spaces.Tuple(
             [
                 spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32)
@@ -256,12 +264,7 @@ class DualUltimatum(gym.Env):
         )
         self.observation_space = spaces.Tuple(
             [
-                spaces.Tuple(
-                    (
-                        spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32),
-                        spaces.Discrete(2),
-                    )
-                )
+                spaces.Box(low=0.0, high=1.0, shape=(5,), dtype=np.float32)
                 for _ in range(2)
             ]
         )
@@ -321,7 +324,7 @@ class DualUltimatum(gym.Env):
         )
         # Add flag indicating this is not the first step
         obs = np.concatenate((obs, np.zeros((2, 1))), axis=1)
-        done = False
+        done = 0
         return obs, rewards, done, {}
 
     def reset(self):
