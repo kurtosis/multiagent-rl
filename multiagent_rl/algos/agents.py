@@ -26,6 +26,9 @@ def mlp(layer_sizes, hidden_activation, final_activation, batchnorm=True):
     return nn.Sequential(*layers)
 
 
+#########################################
+# Actors
+#########################################
 class NormalDistActor(nn.Module):
     """
     A stochastic policy for use in on-policy methods
@@ -57,31 +60,6 @@ class NormalDistActor(nn.Module):
         return pi, logprob
 
 
-class ContinuousEstimator(nn.Module):
-    """
-    Generic MLP object to output continuous value(s).
-    Can be used for:
-        - V function (input: s, output: exp return)
-        - Q function (input: (s, a), output: exp return)
-        - deterministic policy (input: s, output: a)
-    Layer sizes passed as argument.
-    Input dimension: layer_sizes[0]
-    Output dimension: layer_sizes[-1] (should be 1 for V,Q)
-    """
-
-    def __init__(self, layer_sizes, activation, final_activation=nn.Identity, **kwargs):
-        super().__init__()
-        self.net = mlp(layer_sizes, activation, final_activation)
-
-    def forward(self, x):
-        # x should contain [obs, act] for off-policy methods
-        output = self.net(x)
-        return torch.squeeze(output, -1)  # Critical to ensure v has right shape.
-
-    def reset_state(self):
-        pass
-
-
 class BoundedDeterministicActor(nn.Module):
     """
     MLP net for actor in bounded continuous action space.
@@ -100,6 +78,56 @@ class BoundedDeterministicActor(nn.Module):
     def forward(self, x):
         output = (self.net(x) + 1) * self.width / 2 + self.low
         return output
+
+
+class BoundedStochasticActor(nn.Module):
+    """
+    Produces a squashed Normal distribution for one var from a MLP for mu and sigma.
+    """
+
+    def __init__(
+        self,
+        layer_sizes,
+        act_dim,
+        act_low,
+        act_high,
+        activation=nn.ReLU,
+        log_sigma_min=-20,
+        log_sigma_max=2,
+    ):
+        super().__init__()
+        self.act_low = torch.as_tensor(act_low)
+        self.act_width = torch.as_tensor(act_high - act_low)
+        self.shared_net = mlp(layer_sizes, activation, activation)
+        self.mu_layer = nn.Linear(layer_sizes[-1], act_dim)
+        self.log_sigma_layer = nn.Linear(layer_sizes[-1], act_dim)
+        self.log_sigma_min = log_sigma_min
+        self.log_sigma_max = log_sigma_max
+
+    def forward(self, obs, deterministic=False, get_logprob=True):
+        shared = self.shared_net(obs)
+        mu = self.mu_layer(shared)
+        log_sigma = self.log_sigma_layer(shared)
+        log_sigma = torch.clamp(log_sigma, self.log_sigma_min, self.log_sigma_max)
+        sigma = torch.exp(log_sigma)
+        pi = Normal(mu, sigma)
+        if deterministic:
+            # For evaluating performance at end of epoch, not for data collection
+            act = mu
+        else:
+            act = pi.rsample()
+        logprob = None
+        if get_logprob:
+            logprob = pi.log_prob(act).sum(axis=-1)
+            # Convert pdf due to tanh transform
+            # Changed sum axis to work with EpisodeBuffer. Need to ensure this is correct.
+            # logprob -= (2 * (np.log(2) - act - F.softplus(-2 * act))).sum(axis=1)
+            logprob -= (2 * (np.log(2) - act - F.softplus(-2 * act))).sum(axis=-1)
+        else:
+            logprob = None
+        act = torch.tanh(act)
+        act = (act + 1) * self.act_width / 2 + self.act_low
+        return act, logprob
 
 
 class LSTMDeterministicActor(nn.Module):
@@ -221,6 +249,34 @@ class LSTMStochasticActor(nn.Module):
         self.c = torch.zeros_like(self.c)
 
 
+#########################################
+# Critics
+#########################################
+class ContinuousEstimator(nn.Module):
+    """
+    Generic MLP object to output continuous value(s).
+    Can be used for:
+        - V function (input: s, output: exp return)
+        - Q function (input: (s, a), output: exp return)
+        - deterministic policy (input: s, output: a)
+    Layer sizes passed as argument.
+    Input dimension: layer_sizes[0]
+    Output dimension: layer_sizes[-1] (should be 1 for V,Q)
+    """
+
+    def __init__(self, layer_sizes, activation, final_activation=nn.Identity, **kwargs):
+        super().__init__()
+        self.net = mlp(layer_sizes, activation, final_activation)
+
+    def forward(self, x):
+        # x should contain [obs, act] for off-policy methods
+        output = self.net(x)
+        return torch.squeeze(output, -1)  # Critical to ensure v has right shape.
+
+    def reset_state(self):
+        pass
+
+
 class LSTMEstimator(nn.Module):
     """
     LSTM for V(obs) or Q(obs, act)
@@ -272,6 +328,9 @@ class LSTMEstimator(nn.Module):
         self.c = torch.zeros_like(self.c)
 
 
+#########################################
+# Actor-Critic Joint models
+#########################################
 class LSTMJoinedActorCritic(nn.Module):
     """
     MLP net for actor + value in bounded continuous action space.
@@ -320,56 +379,6 @@ class LSTMJoinedActorCritic(nn.Module):
         return action_out, value, (h, c)
 
 
-class BoundedStochasticActor(nn.Module):
-    """
-    Produces a squashed Normal distribution for one var from a MLP for mu and sigma.
-    """
-
-    def __init__(
-        self,
-        layer_sizes,
-        act_dim,
-        act_low,
-        act_high,
-        activation=nn.ReLU,
-        log_sigma_min=-20,
-        log_sigma_max=2,
-    ):
-        super().__init__()
-        self.act_low = torch.as_tensor(act_low)
-        self.act_width = torch.as_tensor(act_high - act_low)
-        self.shared_net = mlp(layer_sizes, activation, activation)
-        self.mu_layer = nn.Linear(layer_sizes[-1], act_dim)
-        self.log_sigma_layer = nn.Linear(layer_sizes[-1], act_dim)
-        self.log_sigma_min = log_sigma_min
-        self.log_sigma_max = log_sigma_max
-
-    def forward(self, obs, deterministic=False, get_logprob=True):
-        shared = self.shared_net(obs)
-        mu = self.mu_layer(shared)
-        log_sigma = self.log_sigma_layer(shared)
-        log_sigma = torch.clamp(log_sigma, self.log_sigma_min, self.log_sigma_max)
-        sigma = torch.exp(log_sigma)
-        pi = Normal(mu, sigma)
-        if deterministic:
-            # For evaluating performance at end of epoch, not for data collection
-            act = mu
-        else:
-            act = pi.rsample()
-        logprob = None
-        if get_logprob:
-            logprob = pi.log_prob(act).sum(axis=-1)
-            # Convert pdf due to tanh transform
-            # Changed sum axis to work with RDPGBuffer. Need to ensure this is correct.
-            # logprob -= (2 * (np.log(2) - act - F.softplus(-2 * act))).sum(axis=1)
-            logprob -= (2 * (np.log(2) - act - F.softplus(-2 * act))).sum(axis=-1)
-        else:
-            logprob = None
-        act = torch.tanh(act)
-        act = (act + 1) * self.act_width / 2 + self.act_low
-        return act, logprob
-
-
 class GaussianActorCritic(nn.Module):
     """
     Contains an actor (to produce policy and act)
@@ -411,6 +420,9 @@ class GaussianActorCritic(nn.Module):
         return self.step(obs)[0]
 
 
+#########################################
+# Agents
+#########################################
 class DDPGAgent(nn.Module):
     """
     Agent to be used in DDPG.

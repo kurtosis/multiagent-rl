@@ -83,7 +83,7 @@ static_agent_kwargs = dict(
 #     env_fn=RoundRobinTournament,
 #     # agent_fn=ConstantBot,
 #     # agent_kwargs=agent_kwargs_constantbot,
-#     # agent_fn=StaticDistribBot,
+#     # agent_fn=DistribBot,
 #     # agent_kwargs=agent_kwargs_distrib,
 #     logger_kwargs=logger_kwargs,
 #     env_kwargs=env_kwargs,
@@ -131,7 +131,7 @@ agent_kwargs_lstm = dict(
 #     agent_kwargs_constantbot,
 #     agent_kwargs_constantbot,
 # ]
-agents = [DDPGLSTMAgent, StaticDistribBot, StaticDistribBot, StaticDistribBot]
+agents = [DDPGLSTMAgent, DistribBot, DistribBot, DistribBot]
 agents_kwargs = [
     # agent_kwargs_ddpg,
     agent_kwargs_lstm,

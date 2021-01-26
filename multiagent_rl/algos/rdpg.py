@@ -68,8 +68,8 @@ def rdpg(
         f"\nNumber of parameters \t policy: {var_counts[0]} q: {var_counts[1]}\n"
     )
 
-    # buf = RDPGBuffer(max_buffer_len)
-    buf = RDPGBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
+    # buf = EpisodeBuffer(max_buffer_len)
+    buf = EpisodeBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
     pi_optimizer = Adam(agent.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(agent.q.parameters(), lr=q_lr)
 

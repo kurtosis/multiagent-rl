@@ -110,68 +110,41 @@ class TrajectoryBuffer:
         return data
 
 
-class OldRDPGBuffer:
+class ReplayBuffer:
     """
-    Stores completed episodes for use in RDPG with recurrent networks. Buffer is a list
-    of (complete) episodes. Once buffer is full, older episodes are overwritten.
+    A simple FIFO experience replay buffer for SAC agents.
     """
 
-    def __init__(self, max_size):
-        self.ptr = 0
-        self.max_size = max_size
-        self.current_start = self.ptr
-        self.current_episode = []
-        self.episodes = [None] * max_size
-        self.filled_size = 0
-        self.full = False
+    def __init__(self, obs_dim, act_dim, size):
+        self.obs_buf = np.zeros(merge_shape(size, obs_dim), dtype=np.float32)
+        self.obs2_buf = np.zeros(merge_shape(size, obs_dim), dtype=np.float32)
+        self.act_buf = np.zeros(merge_shape(size, act_dim), dtype=np.float32)
+        self.rew_buf = np.zeros(size, dtype=np.float32)
+        self.done_buf = np.zeros(size, dtype=np.float32)
+        self.ptr, self.size, self.max_size = 0, 0, size
 
-    def store(self, obs, act, rwd, obs_next, done):
-        """Add latest step variables to current trajectory. If done, add trajectory
-        to buffer and reset. Loop pointer back to 0 when buffer is full."""
-        self.current_episode.append(
-            dict(obs=obs, act=act, rwd=rwd, obs_next=obs_next, done=done)
+    def store(self, obs, act, rew, next_obs, done):
+        self.obs_buf[self.ptr] = obs
+        self.obs2_buf[self.ptr] = next_obs
+        self.act_buf[self.ptr] = act
+        self.rew_buf[self.ptr] = rew
+        self.done_buf[self.ptr] = done
+        self.ptr = (self.ptr + 1) % self.max_size
+        self.size = min(self.size + 1, self.max_size)
+
+    def sample_batch(self, batch_size=32):
+        idxs = np.random.randint(0, self.size, size=batch_size)
+        batch = dict(
+            obs=self.obs_buf[idxs],
+            obs2=self.obs2_buf[idxs],
+            act=self.act_buf[idxs],
+            rew=self.rew_buf[idxs],
+            done=self.done_buf[idxs],
         )
-        if done == 1:
-            self.episodes[self.ptr] = self.current_episode
-            self.current_episode = []
-            self.ptr += 1
-            if not self.full:
-                self.filled_size += 1
-            if self.ptr == self.max_size:
-                self.ptr = 0
-                self.full = True
-
-    def reshape_samples(self, samples):
-        vars = ["obs", "act", "rwd", "obs_next", "done"]
-        data = {
-            v: torch.as_tensor(
-                [[x[v] for x in ep] for ep in samples], dtype=torch.float32
-            )
-            for v in vars
-        }
-        for v in vars:
-            data[v] = data[v].transpose(0, 1)
-        return data
-
-    def sample_episodes(self, batch_size=100):
-        sample_indexes = np.random.randint(0, self.filled_size, batch_size)
-        samples = [self.episodes[i] for i in sample_indexes]
-        return self.reshape_samples(samples)
-
-    def get_latest_episodes(self, batch_size=100):
-        end = self.ptr
-        if self.ptr >= batch_size:
-            start = self.ptr - batch_size
-            samples = self.episodes[start:end]
-            self.reshape_samples(samples)
-
-        return samples
-
-    def clear_current_episode(self):
-        self.current_episode = []
+        return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in batch.items()}
 
 
-class RDPGBuffer:
+class EpisodeBuffer:
     """
     Stores completed episodes for use in RDPG with recurrent networks. Each variable
     is stored as a tensor for fast sampling. Once buffer is full, older episodes are overwritten.

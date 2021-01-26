@@ -14,7 +14,7 @@ def test_rdpg_buffer(
     verbose=False,
 ):
     """Fill an RDPG buffer with sample data and verify it can be read from correctly."""
-    buffer = RDPGBuffer(max_buffer_len)
+    buffer = EpisodeBuffer(max_buffer_len)
     t0 = time.time()
     for i_ep in range(num_ep):
         for i_turn in range(ep_len):
@@ -72,7 +72,7 @@ def train_LSTMEstimator(
     # Freeze target Q so they are not updated by optimizers
     for p in q_target_copy.parameters():
         p.requires_grad = False
-    buf = RDPGBuffer(max_buffer_len)
+    buf = EpisodeBuffer(max_buffer_len)
     q_optimizer = Adam(q.parameters(), lr=q_lr)
     env = MimicObs(ep_len=ep_len, goal_constant=goal_constant, goal_mean=goal_mean)
 
@@ -155,7 +155,7 @@ def train_LSTMDeterministicActor(
     goal_mean=False,
 ):
     pi = LSTMDeterministicActor(input_size, hidden_size, action_size=1, low=0, high=1)
-    buf = RDPGBuffer(max_buffer_len)
+    buf = EpisodeBuffer(max_buffer_len)
     pi_optimizer = Adam(pi.parameters(), lr=pi_lr)
     if goal_constant is not None:
 

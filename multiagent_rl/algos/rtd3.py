@@ -76,8 +76,8 @@ def rtd3(
     # List of parameters for both Q-networks (save this for convenience)
     q_params = itertools.chain(agent.q1.parameters(), agent.q2.parameters())
 
-    # buf = RDPGBuffer(max_buffer_len)
-    buf = RDPGBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
+    # buf = EpisodeBuffer(max_buffer_len)
+    buf = EpisodeBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
     pi_optimizer = Adam(agent.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(q_params, lr=q_lr)
 

@@ -166,7 +166,7 @@ class ConstantDualUltimatum(gym.Env):
 
 
 class DistribDualUltimatum(gym.Env):
-    """A single-agent environment consisting of a 'dual ultimatum' game against a StaticDistribBot"""
+    """A single-agent environment consisting of a 'dual ultimatum' game against a DistribBot"""
 
     def __init__(
         self,
@@ -194,7 +194,7 @@ class DistribDualUltimatum(gym.Env):
         if opponent_demand_std is None:
             opponent_demand_std = np.random.rand()
 
-        self.opponent = StaticDistribBot(
+        self.opponent = DistribBot(
             mean_offer=opponent_offer_mean,
             std_offer=opponent_offer_std,
             mean_demand=opponent_demand_mean,
@@ -236,7 +236,7 @@ class DistribDualUltimatum(gym.Env):
             opponent_offer_std = np.random.rand()
             opponent_demand_mean = np.random.rand()
             opponent_demand_std = np.random.rand()
-            self.opponent = StaticDistribBot(
+            self.opponent = DistribBot(
                 mean_offer=opponent_offer_mean,
                 std_offer=opponent_offer_std,
                 mean_demand=opponent_demand_mean,

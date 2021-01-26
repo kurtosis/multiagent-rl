@@ -80,7 +80,7 @@ def rsac(
         f"\nNumber of parameters \t policy: {var_counts[0]} q1/2: {var_counts[1]}\n"
     )
 
-    buf = RDPGBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
+    buf = EpisodeBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
 
     pi_optimizer = Adam(agent.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(q_params, lr=q_lr)
