@@ -21,7 +21,7 @@ class OneHot(gym.Space):
     """
 
     def __init__(self, n):
-        super(OneHot, self).__init__()
+        super().__init__()
         self.n = n
 
     def sample(self):
@@ -58,7 +58,7 @@ class ConstantDualUltimatum(gym.Env):
         fixed=True,
         reward_penalty=0.01,
     ):
-        super(ConstantDualUltimatum, self).__init__()
+        super().__init__()
         self.fixed = fixed
         if opponent_offer is None:
             self.opponent_offer = np.random.rand()
@@ -177,7 +177,7 @@ class DistribDualUltimatum(gym.Env):
         opponent_demand_std=None,
         fixed=False,
     ):
-        super(DistribDualUltimatum, self).__init__()
+        super().__init__()
         self.ep_len = ep_len
         self.current_turn = 0
         self.fixed = fixed
@@ -253,9 +253,10 @@ class DistribDualUltimatum(gym.Env):
 class DualUltimatum(gym.Env):
     """A two-agent environment consisting of a 'dual ultimatum' game'"""
 
-    def __init__(self, reward="ultimatum"):
-        super(DualUltimatum, self).__init__()
-
+    def __init__(self, ep_len=10, reward="ultimatum"):
+        super().__init__()
+        self.ep_len = ep_len
+        self.current_turn = 0
         self.action_space = spaces.Tuple(
             [
                 spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32)
@@ -278,8 +279,8 @@ class DualUltimatum(gym.Env):
             self.rewards = self._ultimatum_rewards
 
     def _ultimatum_rewards(self, actions):
-        offer_0, demand_0 = actions[0, :]
-        offer_1, demand_1 = actions[1, :]
+        offer_0, demand_0 = actions[0]
+        offer_1, demand_1 = actions[1]
 
         if offer_0 + EPS >= demand_1 and offer_1 + EPS >= demand_0:
             reward_0 = (1 - offer_0) + offer_1
@@ -318,16 +319,22 @@ class DualUltimatum(gym.Env):
         rewards = self.rewards(actions)
         obs = np.array(
             [
-                np.concatenate((actions[0, :], actions[1, :])),
-                np.concatenate((actions[1, :], actions[0, :])),
+                np.concatenate((actions[0], actions[1])),
+                np.concatenate((actions[1], actions[0])),
             ]
         )
         # Add flag indicating this is not the first step
         obs = np.concatenate((obs, np.zeros((2, 1))), axis=1)
-        done = 0
+        if self.current_turn == (self.ep_len - 1):
+            done = 1
+            _ = self.reset()
+        else:
+            done = 0
+            self.current_turn += 1
         return obs, rewards, done, {}
 
     def reset(self):
+        self.current_turn = 0
         # Create init state obs, with flag indicating this is the first step
         obs = np.zeros((2, 5))
         obs[:, -1] = 1
@@ -348,7 +355,7 @@ class MatrixGame(gym.Env):
         payout_mean=np.array([[10, 5, -5], [0, 0, 5], [20, -5, 0]]),
         payout_std=np.array([[0, 0, 0], [0, 0, 0], [0, 20, 20]]),
     ):
-        super(MatrixGame, self).__init__()
+        super().__init__()
         self.num_actions = 3
         self.action_space = spaces.Tuple(
             [spaces.Discrete(self.num_actions) for _ in range(2)]
@@ -418,7 +425,7 @@ class RoundRobinTournament(gym.Env):
         hide_score=True,
         game_kwargs=dict(),
     ):
-        super(RoundRobinTournament, self).__init__()
+        super().__init__()
 
         self.num_agents = num_agents
         self.num_matches = int(num_agents / 2)
@@ -626,7 +633,7 @@ class MimicObs(gym.Env):
     def __init__(
         self, ep_len=10, reward="l1", target="last", goal_constant=None, goal_mean=False
     ):
-        super(MimicObs, self).__init__()
+        super().__init__()
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
         self.observation_space = spaces.Box(
             low=0.0, high=1.0, shape=(1,), dtype=np.float32

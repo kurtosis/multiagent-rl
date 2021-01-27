@@ -1,21 +1,9 @@
-# import multiagent_rl.algos.orig_ddpg.core as core
-# from multiagent_rl.algos.orig_ddpg.ddpg import *
-
-# import multiagent_rl.algos.orig_sac.core as core
-# from multiagent_rl.algos.orig_sac.sac import *
-
-# import multiagent_rl.algos.orig_td3.core as core
-# from multiagent_rl.algos.orig_td3.td3 import *
-
-# from multiagent_rl.algos.ddpg import *
 
 from multiagent_rl.algos.rdpg import *
 
-# from multiagent_rl.algos.td3 import *
 from multiagent_rl.algos.sac import *
 from multiagent_rl.algos.rsac import *
 
-# from multiagent_rl.algos.rtd3 import *
 
 from multiagent_rl.environments.tournament_env import *
 
@@ -25,7 +13,7 @@ steps_per_epoch = 1000
 epochs = 200
 pi_lr = 1e-3
 q_lr = 1e-3
-a_lr = 2e-3
+a_lr = 1e-3
 batch_size = 1000
 batch_size_eps = 100
 start_steps = 3000
@@ -61,8 +49,8 @@ for i in range(n_runs):
     seed += 1
     rsac(
         seed=seed,
-        steps_per_epoch=200,
-        epochs=epochs,
+        steps_per_epoch=400,
+        epochs=100,
         pi_lr=pi_lr,
         q_lr=q_lr,
         a_lr=a_lr,
@@ -87,10 +75,10 @@ for i in range(n_runs):
         update_alpha_after=15000,
         target_entropy=-8.0,
         logger_kwargs={
-            "output_dir": "~/research/multiagent-rl/data/testing/constantbot/rsac/",
-            "exp_name": "distrib_2",
+            # "output_dir": "~/research/multiagent-rl/data/testing/constantbot/rsac/",
+            # "exp_name": "distrib_2",
         },
-        q_filename="~/research/multiagent-rl/data/q_maps/distrib_2",
+        # q_filename="~/research/multiagent-rl/data/q_maps/distrib_2",
         save_q_every=5000,
     )
 

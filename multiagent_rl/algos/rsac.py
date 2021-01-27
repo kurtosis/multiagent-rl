@@ -1,11 +1,11 @@
 from itertools import chain
+import time
+
 from torch.optim import Adam
 
 from multiagent_rl.algos.agents import *
 from multiagent_rl.algos.buffers import *
-from multiagent_rl.algos.orig_sac.sac import ReplayBuffer
 from multiagent_rl.algos.training import count_vars
-
 from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.utils.evaluation_utils import *
 

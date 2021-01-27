@@ -1,12 +1,15 @@
 from copy import deepcopy
+from itertools import chain
 import numpy as np
-import time
 
 import torch
 from torch.distributions import Normal
 import torch.nn.functional as F
 import torch.nn as nn
 from torch.optim import Adam
+
+from multiagent_rl.algos.buffers import EpisodeBuffer
+
 
 """
 Actor and Critic agents used in various RL algorithms
@@ -293,7 +296,7 @@ class LSTMEstimator(nn.Module):
         layer_sizes,
         activation=nn.ReLU,
         final_activation=nn.Identity,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         self.input_size = input_size
@@ -350,7 +353,7 @@ class LSTMJoinedActorCritic(nn.Module):
         high,
         activation=nn.ReLU,
         final_activation=nn.Identity,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         # self.net = mlp(layer_sizes, activation, nn.Tanh)
@@ -392,7 +395,7 @@ class GaussianActorCritic(nn.Module):
         hidden_layers_mu=(64, 64),
         hidden_layers_v=(64, 64),
         activation=nn.Tanh,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         obs_dim = observation_space.shape[0]
@@ -446,7 +449,7 @@ class DDPGAgent(nn.Module):
         q_lr=1e-3,
         polyak=0.995,
         gamma=0.99,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         if obs_dim is None:
@@ -468,7 +471,7 @@ class DDPGAgent(nn.Module):
             final_activation=final_activation,
             low=self.act_low,
             high=self.act_high,
-            **kwargs
+            **kwargs,
         )
         self.q = ContinuousEstimator(
             layer_sizes=layer_sizes_q, activation=activation, **kwargs
@@ -565,7 +568,7 @@ class TD3Agent(nn.Module):
         activation=nn.ReLU,
         final_activation=nn.Tanh,
         noise_std=0.1,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         obs_dim = obs_space.shape[0]
@@ -583,7 +586,7 @@ class TD3Agent(nn.Module):
             final_activation=final_activation,
             low=self.act_low,
             high=self.act_high,
-            **kwargs
+            **kwargs,
         )
         self.q1 = ContinuousEstimator(
             layer_sizes=layer_sizes_q, activation=activation, **kwargs
@@ -621,7 +624,7 @@ class SACAgent(nn.Module):
         hidden_layers_pi=(256, 256),
         hidden_layers_q=(256, 256),
         activation=nn.ReLU,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         obs_dim = obs_space.shape[0]
@@ -634,7 +637,7 @@ class SACAgent(nn.Module):
             action_space.low,
             action_space.high,
             activation=activation,
-            **kwargs
+            **kwargs,
         )
         self.q1 = ContinuousEstimator(
             layer_sizes=layer_sizes_q, activation=activation, **kwargs
@@ -673,7 +676,7 @@ class RDPGAgent(nn.Module):
         polyak=0.995,
         gamma=0.99,
         q_fn="LSTMEstimator",
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         if obs_dim is None:
@@ -692,7 +695,7 @@ class RDPGAgent(nn.Module):
             action_size=self.act_dim,
             low=self.act_low,
             high=self.act_high,
-            **kwargs
+            **kwargs,
         )
 
         # This is a quick hack to test RDPG with a non-LSTM Q function
@@ -803,7 +806,17 @@ class RSACAgent(nn.Module):
         mlp_layers_pi=(256, 256),
         mlp_layers_q=(256, 256),
         activation=nn.ReLU,
-        **kwargs
+        max_ep_len=10,
+        max_buf_len=10000,
+        gamma=0.99,
+        polyak=0.995,
+        pi_lr=1e-3,
+        q_lr=1e-3,
+        a_lr=1e-3,
+        alpha=0.05,
+        update_alpha_after=5000,
+        target_entropy=-4.0,
+        **kwargs,
     ):
         super().__init__()
         self.obs_dim = obs_space.shape[0]
@@ -831,7 +844,35 @@ class RSACAgent(nn.Module):
             layer_sizes=layer_sizes_q,
         )
 
-    def act(self, obs, deterministic=False):
+        self.q1_targ = deepcopy(self.q1)
+        self.q2_targ = deepcopy(self.q2)
+
+        # Freeze targets so they are not updated by optimizers
+        for p in self.q1_targ.parameters():
+            p.requires_grad = False
+        for p in self.q2_targ.parameters():
+            p.requires_grad = False
+
+        self.buffer = EpisodeBuffer(self.obs_dim, self.act_dim, max_ep_len, max_buf_len)
+        self.log_alpha = torch.tensor(np.log(alpha), requires_grad=True)
+        self.polyak = polyak
+        self.gamma = gamma
+        self.alpha = alpha
+        self.log_alpha = torch.tensor(np.log(self.alpha), requires_grad=True)
+        self.update_alpha_after = update_alpha_after
+        self.target_entropy = target_entropy
+        self.pi_optimizer = Adam(self.pi.parameters(), lr=pi_lr)
+        self.q_params = chain(self.q1.parameters(), self.q2.parameters())
+        self.q_optimizer = Adam(self.q_params, lr=q_lr)
+        self.alpha_optimizer = Adam([self.log_alpha], lr=a_lr)
+
+        # Create parameter objects for convenience when updating targets
+        self.main_params = chain(
+            self.pi.parameters(), self.q1.parameters(), self.q2.parameters()
+        )
+        self.targ_params = chain(self.q1_targ.parameters(), self.q2_targ.parameters())
+
+    def act(self, obs, deterministic=False, **kwargs):
         """Return noisy action as numpy array, **without computing grads**"""
         with torch.no_grad():
             act, _ = self.pi(obs, deterministic=deterministic, get_logprob=False)
@@ -843,3 +884,108 @@ class RSACAgent(nn.Module):
         self.pi.reset_state()
         self.q1.reset_state()
         self.q2.reset_state()
+
+    def store_to_buffer(self, obs, act, rwd, obs_next, done):
+        self.buffer.store(obs, act, rwd, obs_next, done)
+
+    def compute_loss_pi(self, data):
+        obs = data["obs"]
+        act, logprob_pi = self.pi(obs)
+        pi_info = dict(LogPi=logprob_pi.detach().numpy())
+        q1_pi = self.q1(torch.cat([obs, act], dim=-1))
+        q2_pi = self.q2(torch.cat([obs, act], dim=-1))
+        q_pi = torch.min(q1_pi, q2_pi)
+        logprob_pi = logprob_pi.reshape_as(q_pi)
+        loss_pi = (-q_pi + self.alpha * logprob_pi).mean()
+        return loss_pi, pi_info
+
+    def compute_loss_q(self, data):
+        obs, act, rwd, obs_next, done = (
+            data["obs"],
+            data["act"],
+            data["rwd"],
+            data["obs_next"],
+            data["done"],
+        )
+
+        q1 = self.q1(torch.cat([obs, act], dim=-1))
+        q2 = self.q2(torch.cat([obs, act], dim=-1))
+        q1 = q1.reshape_as(done)
+        q2 = q2.reshape_as(done)
+
+        # Bellman backup for Q function
+        with torch.no_grad():
+            obs_padded = F.pad(obs, (0, 0, 0, 0, 0, 1), "constant", 0)
+            act_padded, logprob_padded = self.pi(obs_padded)
+
+            q1_target = self.q1_targ(torch.cat([obs_padded, act_padded], dim=-1))
+            q2_target = self.q2_targ(torch.cat([obs_padded, act_padded], dim=-1))
+            q_target_padded = torch.min(q1_target, q2_target)
+
+            # HACK - probably a way to do this in one line with slice?
+            if len(q_target_padded.shape) == 3:
+                q_target = q_target_padded[1:, :, :]
+            elif len(q_target_padded.shape) == 2:
+                q_target = q_target_padded[1:, :]
+            else:
+                raise ValueError("Q tensor has unexpected number of dimensions!")
+            logprob_next = logprob_padded[1:, :]
+
+            # reshape so that this will work with SACAgent (for testing)
+            q_target = q_target.reshape_as(done)
+            logprob_next = logprob_next.reshape_as(done)
+            backup = rwd + self.gamma * (1 - done) * (
+                q_target - self.alpha * logprob_next
+            )
+
+        # MSE loss against Bellman backup
+        loss_q = ((q1 - backup) ** 2).mean() + ((q2 - backup) ** 2).mean()
+
+        # Useful info for logging
+        loss_info = dict(Q1Vals=q1.detach().numpy(), Q2Vals=q2.detach().numpy(),)
+
+        return loss_q, loss_info
+
+    def update(self, batch_size, t_total):
+        # Get training data from buffer
+        data = self.buffer.sample_episodes(batch_size)
+
+        # Update Q function
+        self.q_optimizer.zero_grad()
+        loss_q, loss_info = self.compute_loss_q(data)
+        loss_q.backward()
+        self.q_optimizer.step()
+
+        # logger.store(LossQ=loss_q.item(), **loss_info)
+
+        for p in self.q_params:
+            p.requires_grad = False
+
+        # Update policy
+        self.pi_optimizer.zero_grad()
+        loss_pi, pi_info = self.compute_loss_pi(data)
+        loss_pi.backward()
+        self.pi_optimizer.step()
+
+        # Unfreeze Q params after policy update
+        for p in self.q_params:
+            p.requires_grad = True
+
+        # logger.store(LossPi=loss_pi.item(), **pi_info)
+
+        with torch.no_grad():
+            for p, p_target in zip(self.q_params, self.targ_params):
+                p_target.data.mul_(self.polyak)
+                p_target.data.add_((1 - self.polyak) * p.data)
+
+        # Update alpha
+        if t_total >= self.update_alpha_after:
+            obs = data["obs"]
+            pi, log_pi = self.pi(obs)
+            loss_alpha = (
+                self.log_alpha * (-log_pi - self.target_entropy).detach()
+            ).mean()
+            self.alpha_optimizer.zero_grad()
+            loss_alpha.backward()
+            self.alpha_optimizer.step()
+            self.alpha = self.log_alpha.exp()

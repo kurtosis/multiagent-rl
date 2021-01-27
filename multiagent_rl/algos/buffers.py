@@ -146,7 +146,7 @@ class ReplayBuffer:
 
 class EpisodeBuffer:
     """
-    Stores completed episodes for use in RDPG with recurrent networks. Each variable
+    Stores completed episodes for use with recurrent actor/critic networks. Each variable
     is stored as a tensor for fast sampling. Once buffer is full, older episodes are overwritten.
     """
 
