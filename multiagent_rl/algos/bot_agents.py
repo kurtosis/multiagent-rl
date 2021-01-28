@@ -11,17 +11,11 @@ import numpy as np
 # sys.path.insert(0, "/Users/kurtsmith/research/spinningup")
 
 
-class Agent:
+class AgentBot:
     """
-    Top level Agent class for Dual Ultimatum game.
+    Top level class for bot agents for use in Dual Ultimatum environment. The main purpose of this is to define
+    default no-op methods for methods that do not pertain to a particular type of agent.
     """
-
-    # def __init__(
-    #     self,
-    #     *args,
-    #     **kwargs,
-    # ):
-    #     pass
 
     def act(self):
         raise NotImplementedError
@@ -36,7 +30,7 @@ class Agent:
         pass
 
 
-class ConstantBot(Agent):
+class ConstantBot(AgentBot):
     """
     Static bot that plays a constant action in Dual Ultimatum episode.
     fixed flag controls allows the action to be reset at the start of a new episode.
@@ -82,7 +76,7 @@ class ConstantBot(Agent):
             self.demand = self.set_action(None, self.mean_demand, self.std_demand)
 
 
-class DistribBot(Agent):
+class DistribBot(AgentBot):
     """
     Bot that plays a draw from a static distribution, based on tanh transform.
     To do: Could implement this using beta or log-odds normal distr instead, easier to reason about?
@@ -128,7 +122,7 @@ class DistribBot(Agent):
         return np.array((offer, demand))
 
 
-class MimicBot(Agent):
+class MimicBot(AgentBot):
     def __init__(self):
         super().__init__()
 
@@ -140,14 +134,14 @@ class MimicBot(Agent):
         return np.array((last_offer, last_demand))
 
 
-class BenchmarkBot(Agent):
+class BenchmarkBot(AgentBot):
     def __init__(self, benchmark=1):
         super().__init__()
         self.benchmark = benchmark
         self.cum_total = 0
 
 
-class GreedFearBot(Agent):
+class GreedFearBot(AgentBot):
     def __init__(self, greed=1, fear=1):
         super().__init__()
         self.greed = greed

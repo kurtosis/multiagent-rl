@@ -844,10 +844,6 @@ class RSACAgent(nn.Module):
         update_alpha_after : number of env interactions to run before updating alpha
         target_entropy : controls the min value that alpha is reduced to during training.
             (typically negative, lower values cause alpha to be reduced more)
-
-    Contains:
-    - stochastic policy (bounded by tanh)
-    - estimated Q*(s,a,)
     """
 
     def __init__(

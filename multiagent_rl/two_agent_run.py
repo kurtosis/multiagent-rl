@@ -16,7 +16,7 @@ rsac_agent_kwargs = {
     "target_entropy": -4.0,
 }
 
-constantbot_kwargs = {"offer": 0.2, "demand": 0.4, "fixed": False}
+constantbot_kwargs = {"offer": 0.2, "demand": 0.4, "fixed": True}
 
 agent_kwargs = [rsac_agent_kwargs, constantbot_kwargs]
 
