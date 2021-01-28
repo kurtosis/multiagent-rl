@@ -10,7 +10,7 @@ from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.utils.evaluation_utils import *
 
 
-def two_agent_rsac(
+def train_rsac_two_agent(
     env_fn=None,
     env_kwargs=dict(),
     agent_fns=None,
@@ -28,10 +28,11 @@ def two_agent_rsac(
     save_freq=1,
 ):
     """
-    Training loop for a two-agent environment, possibly with RSAC Agents. Note: many objects and functions are assumed
-    to be implemented as agent attributes/methods whereas in single-agent RL they might be implemented in the overall
-    training loop. (Such as replay buffers, optimizers, and update methods). In addition, many parameters (such as
-    learning rates) should be passed as keyword args to each agent.
+    Training loop for a two-agent environment, using episode-based training suitable for RSAC Agents.
+    Note: many objects and functions are assumed to be implemented as agent attributes/methods whereas in
+    single-agent RL they might be implemented in the overall
+    training loop. (Such as replay buffers, optimizers, and update methods).
+    Note that many parameters (such as learning rates) must be passed as keyword args to each agent.
 
     Args:
         env_fn: a function which creates a copy of the environment. Must satisfy the OpenAI Gym API.
@@ -101,8 +102,10 @@ def two_agent_rsac(
                 obs, rwd, done, _ = test_env.step(act)
                 episode_return += rwd
                 episode_length += 1
-                logger.store(TestActOffer=act[0][0], TestActDemand=act[0][1])
-            logger.store(TestEpRet=episode_return[0], TestEpLen=episode_length)
+                logger.store(TestActOffer1=act[0][0], TestActDemand1=act[0][1])
+                logger.store(TestActOffer2=act[1][0], TestActDemand2=act[1][1])
+            logger.store(TestEpRet1=episode_return[0], TestEpLen=episode_length)
+            logger.store(TestEpRet2=episode_return[1])
 
     def reset_all():
         all_obs = env.reset()
@@ -163,9 +166,12 @@ def two_agent_rsac(
         logger.log_tabular("EpRet", with_min_and_max=True)
         logger.log_tabular("ActOffer", with_min_and_max=True)
         logger.log_tabular("ActDemand", with_min_and_max=True)
-        logger.log_tabular("TestEpRet", with_min_and_max=True)
-        logger.log_tabular("TestActOffer", with_min_and_max=True)
-        logger.log_tabular("TestActDemand", with_min_and_max=True)
+        logger.log_tabular("TestEpRet1", with_min_and_max=True)
+        logger.log_tabular("TestEpRet2", with_min_and_max=True)
+        logger.log_tabular("TestActOffer1", with_min_and_max=True)
+        logger.log_tabular("TestActOffer2", with_min_and_max=True)
+        logger.log_tabular("TestActDemand1", with_min_and_max=True)
+        logger.log_tabular("TestActDemand2", with_min_and_max=True)
         logger.log_tabular("EpLen", average_only=True)
         logger.log_tabular("TestEpLen", average_only=True)
         logger.log_tabular("TotalEnvInteracts", (epoch + 1) * steps_per_epoch)

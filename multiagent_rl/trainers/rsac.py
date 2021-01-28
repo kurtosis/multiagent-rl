@@ -1,18 +1,18 @@
-from itertools import chain
+# from itertools import chain
 import time
 
-from torch.optim import Adam
+# from torch.optim import Adam
 
-from multiagent_rl.algos.agents import *
-from multiagent_rl.algos.buffers import *
-from multiagent_rl.algos.training import count_vars
+from multiagent_rl.agents.agents import *
+from multiagent_rl.buffers import *
+# from multiagent_rl.utils.evaluation_utils import count_vars
 from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.utils.evaluation_utils import *
 
 
-def rsac(
+def train_rsac(
     env_fn,
-    agent_fn=SACAgent,
+    agent_fn=RSACAgent,
     seed=0,
     steps_per_epoch=4000,
     epochs=100,

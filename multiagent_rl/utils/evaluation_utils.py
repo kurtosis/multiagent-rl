@@ -8,6 +8,11 @@ import pandas as pd
 import torch
 from torch.optim import Adam
 
+
+def count_vars(module):
+    return sum([np.prod(p.shape) for p in module.parameters()])
+
+
 def eval_q_vs_a(data, ac):
     o, a = data["obs"], data["act"]
     print("Varying offer")
@@ -154,12 +159,12 @@ def save_q_map(q, filename, step, n=101):
 
 def eval_done(agent, agent_target, data, gamma, alpha, q_lr, n=101):
     obs, act, rwd, obs_next, done = (
-            data["obs"],
-            data["act"],
-            data["rew"],
-            data["obs2"],
-            data["done"],
-        )
+        data["obs"],
+        data["act"],
+        data["rew"],
+        data["obs2"],
+        data["done"],
+    )
     agent_a = deepcopy(agent)
 
     qa_params = chain(agent_a.q1.parameters(), agent_a.q2.parameters())
