@@ -18,34 +18,46 @@ def two_agent_rsac(
     seed=0,
     steps_per_epoch=4000,
     epochs=100,
-    max_buffer_len=100000,
-    gamma=0.99,
-    polyak=0.995,
-    pi_lr=1e-3,
-    q_lr=1e-3,
-    a_lr=1e-3,
     batch_size=100,
     start_steps=10000,
     update_after=1000,
     update_every=50,
     num_test_episodes=10,
-    log_interval=10,
-    max_episode_len=10,
+    max_ep_len=10,
     logger_kwargs=dict(),
     save_freq=1,
-    alpha=0.05,
-    update_alpha_after=5000,
-    target_entropy=-4.0,
-    save_q_every=0,
-    q_filename="/Users/kurtsmith/research/multiagent-rl/data/q",
 ):
-    """Run Recurrent-SAC training."""
-    # Initialize environment, agent, auxiliary objects
+    """
+    Training loop for a two-agent environment, possibly with RSAC Agents. Note: many objects and functions are assumed
+    to be implemented as agent attributes/methods whereas in single-agent RL they might be implemented in the overall
+    training loop. (Such as replay buffers, optimizers, and update methods). In addition, many parameters (such as
+    learning rates) should be passed as keyword args to each agent.
 
-    num_agents = 2
+    Args:
+        env_fn: a function which creates a copy of the environment. Must satisfy the OpenAI Gym API.
+        env_kwargs: keyword args for the environment constructor.
+        agent_fns: a list of (two) constructor methods for the agents.
+        agent_kwargs: a list of (two) dicts of keyword args for the agent constructors.
+        seed: seed for random number generators.
+        steps_per_epoch: number of interactions between the agents and environment in each epoch.
+        epochs: total number of epochs to train agents over.
+        batch_size: number of episodes per minibatch in optimization/SGD.
+        start_steps: number of steps to perform (uniform) random actions before using agent policies.
+            Intended for exploration.
+        update_after: number of interaction updates to store to buffers before starting agent updates. Ensures there
+            is enough data in buffers for updates to be useful.
+        update_every: number of interactions to run between agent updates. Note: regardless of this value, the
+            ratio of interactions to updates is set to 1.
+        num_test_episodes: number of episodes to test deterministic agent policies at the end of each epoch.
+        max_ep_len: max episode length. Note: This function assumes all episodes have a fixed length.
+        logger_kwargs: keyword args for the logger.
+        save_freq: how frequently (by number of epochs) to save current agents.
+    """
 
-    q1_filename = os.path.expanduser(q_filename) + "_1_map.csv"
-    q2_filename = os.path.expanduser(q_filename) + "_2_map.csv"
+    # Note: this function is designed specifically for two-agent environments.
+    NUM_AGENTS = 2
+    assert len(agent_fns) == NUM_AGENTS
+    assert len(agent_kwargs) == NUM_AGENTS
 
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
@@ -61,13 +73,13 @@ def two_agent_rsac(
     for i, space in enumerate(env.action_space):
         space.seed(seed + i)
     for i, space in enumerate(test_env.action_space):
-        space.seed(seed+i)
+        space.seed(seed + i)
 
     agent_list = []
     for i, fn in enumerate(agent_fns):
         obs_space = env.observation_space[i]
         action_space = env.action_space[i]
-        agent =fn(obs_space, action_space, **agent_kwargs[i])
+        agent = fn(obs_space, action_space, **agent_kwargs[i])
         agent_list.append(agent)
 
     def deterministic_policy_test():
@@ -75,15 +87,15 @@ def two_agent_rsac(
             obs = test_env.reset()
             for agent in agent_list:
                 agent.reset_state()
-            episode_return = np.zeros(num_agents)
+            episode_return = np.zeros(NUM_AGENTS)
             episode_length = 0
             done = False
-            while not done and not episode_length == max_episode_len:
+            while not done and not episode_length == max_ep_len:
                 act = [
                     agent_list[i].act(
                         torch.as_tensor(obs[i], dtype=torch.float32), noise=True
                     )
-                    for i in range(num_agents)
+                    for i in range(NUM_AGENTS)
                 ]
                 act = np.stack(act)
                 obs, rwd, done, _ = test_env.step(act)
@@ -92,12 +104,11 @@ def two_agent_rsac(
                 logger.store(TestActOffer=act[0][0], TestActDemand=act[0][1])
             logger.store(TestEpRet=episode_return[0], TestEpLen=episode_length)
 
-
     def reset_all():
         all_obs = env.reset()
         for agent in agent_list:
             agent.reset_state()
-        episode_return = np.zeros(num_agents)
+        episode_return = np.zeros(NUM_AGENTS)
         episode_length = 0
         return all_obs, episode_return, episode_length
 
@@ -116,7 +127,7 @@ def two_agent_rsac(
                     agent_list[i].act(
                         torch.as_tensor(obs[i], dtype=torch.float32), noise=True
                     )
-                    for i in range(num_agents)
+                    for i in range(NUM_AGENTS)
                 ]
             act = np.stack(act)
             logger.store(ActOffer=act[0][0], ActDemand=act[0][1])
