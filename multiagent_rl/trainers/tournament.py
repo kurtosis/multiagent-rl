@@ -3,15 +3,16 @@ import time
 
 from torch.optim import Adam
 
-from multiagent_rl.algos.agents import *
-from multiagent_rl.algos.buffers import *
-from multiagent_rl.algos.training import count_vars
+from multiagent_rl.environments.tournament_env import *
+from multiagent_rl.agents import *
+from multiagent_rl.buffers import *
+# from multiagent_rl.algos.training import count_vars
 from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.utils.evaluation_utils import *
 
 
-def train_rsac_two_agent(
-    env_fn=None,
+def train_tournament(
+    env_fn=RoundRobinTournament,
     env_kwargs=dict(),
     agent_fns=None,
     agent_kwargs=None,
@@ -28,11 +29,10 @@ def train_rsac_two_agent(
     save_freq=1,
 ):
     """
-    Training loop for a two-agent environment, using episode-based training suitable for RSAC Agents.
-    Note: many objects and functions are assumed to be implemented as agent attributes/methods whereas in
-    single-agent RL they might be implemented in the overall
-    training loop. (Such as replay buffers, optimizers, and update methods).
-    Note that many parameters (such as learning rates) must be passed as keyword args to each agent.
+    Training loop for the multi-agent RoundRobinTournament environment. Note: many objects and functions are assumed
+    to be implemented as agent attributes/methods whereas in single-agent RL they might be implemented in the overall
+    training loop. (Such as replay buffers, optimizers, and update methods). In addition, many parameters (such as
+    learning rates) should be passed as keyword args to each agent.
 
     Args:
         env_fn: a function which creates a copy of the environment. Must satisfy the OpenAI Gym API.
@@ -56,9 +56,9 @@ def train_rsac_two_agent(
     """
 
     # Note: this function is designed specifically for two-agent environments.
-    NUM_AGENTS = 2
-    assert len(agent_fns) == NUM_AGENTS
-    assert len(agent_kwargs) == NUM_AGENTS
+    num_agents = len(agent_fns)
+    env_kwargs['num_agents'] = num_agents
+    assert len(agent_kwargs) == num_agents
 
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
@@ -88,7 +88,7 @@ def train_rsac_two_agent(
             obs = test_env.reset()
             for agent in agent_list:
                 agent.reset_state()
-            episode_return = np.zeros(NUM_AGENTS)
+            episode_return = np.zeros(num_agents)
             episode_length = 0
             done = False
             while not done and not episode_length == max_ep_len:
@@ -96,7 +96,7 @@ def train_rsac_two_agent(
                     agent_list[i].act(
                         torch.as_tensor(obs[i], dtype=torch.float32), noise=True
                     )
-                    for i in range(NUM_AGENTS)
+                    for i in range(num_agents)
                 ]
                 act = np.stack(act)
                 obs, rwd, done, _ = test_env.step(act)
@@ -111,7 +111,7 @@ def train_rsac_two_agent(
         all_obs = env.reset()
         for agent in agent_list:
             agent.reset_state()
-        episode_return = np.zeros(NUM_AGENTS)
+        episode_return = np.zeros(num_agents)
         episode_length = 0
         return all_obs, episode_return, episode_length
 
@@ -130,7 +130,7 @@ def train_rsac_two_agent(
                     agent_list[i].act(
                         torch.as_tensor(obs[i], dtype=torch.float32), noise=True
                     )
-                    for i in range(NUM_AGENTS)
+                    for i in range(num_agents)
                 ]
             act = np.stack(act)
             logger.store(ActOffer=act[0][0], ActDemand=act[0][1])
