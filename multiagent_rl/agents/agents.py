@@ -231,7 +231,6 @@ class LSTMStochasticActor(nn.Module):
             c = torch.zeros((1, batch_size, self.hidden_size))
             lstm_out, _ = self.lstm(input, (h, c))
         else:
-            # TODO: what should the input dims be exactly? Are there edge cases?
             lstm_out, (h, c) = self.lstm(
                 input.view(-1, 1, len(input)), (self.h, self.c)
             )

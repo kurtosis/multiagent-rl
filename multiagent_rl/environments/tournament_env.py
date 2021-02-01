@@ -47,7 +47,7 @@ class OneHot(gym.Space):
 
 
 class ConstantDualUltimatum(gym.Env):
-    """A single-agent environment consisting of a 'dual ultimatum' game against a constant bot"""
+    """A single-agent environment consisting of a dual ultimatum game against a constant bot"""
 
     def __init__(
         self,
@@ -166,7 +166,7 @@ class ConstantDualUltimatum(gym.Env):
 
 
 class DistribDualUltimatum(gym.Env):
-    """A single-agent environment consisting of a 'dual ultimatum' game against a DistribBot"""
+    """A single-agent environment consisting of a dual ultimatum game against a DistribBot"""
 
     def __init__(
         self,
@@ -251,7 +251,7 @@ class DistribDualUltimatum(gym.Env):
 
 
 class DualUltimatum(gym.Env):
-    """A two-agent environment consisting of a 'dual ultimatum' game'"""
+    """A two-agent environment consisting of a dual ultimatum game between any two agents."""
 
     def __init__(self, ep_len=10, reward="ultimatum"):
         super().__init__()

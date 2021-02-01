@@ -1,15 +1,5 @@
 import numpy as np
 
-# import os, sys
-# from multiagent_rl.environments.tournament_env import *
-#
-# os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
-#
-# sys.path.insert(
-#     0, "/Users/kurtsmith/research/pytorch_projects/reinforcement_learning/environments"
-# )
-# sys.path.insert(0, "/Users/kurtsmith/research/spinningup")
-
 
 class AgentBot:
     """
@@ -33,7 +23,7 @@ class AgentBot:
 class ConstantBot(AgentBot):
     """
     Static bot that plays a constant action in Dual Ultimatum episode.
-    fixed flag controls allows the action to be reset at the start of a new episode.
+    fixed flag determines whether the action is reset at the start of a new episode.
 
     """
 
@@ -78,8 +68,7 @@ class ConstantBot(AgentBot):
 
 class DistribBot(AgentBot):
     """
-    Bot that plays a draw from a static distribution, based on tanh transform.
-    To do: Could implement this using beta or log-odds normal distr instead, easier to reason about?
+    Bot that plays a random draw from a distribution, based on tanh transform of a normal dist.
     """
 
     def __init__(
