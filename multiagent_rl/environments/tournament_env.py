@@ -1,3 +1,24 @@
+"""
+Dual Ultimatum Environments
+This is a series of environments based on the Ultimatum game.
+(https://en.wikipedia.org/wiki/Ultimatum_game)
+All environments satisfy the OpenAI Gym API.
+These environments are based on a modified "Dual Ultimatum" game between two agents. A single turn
+of this game can be thought of as follows:
+- Each agent is given $1 to share with the other agent. (for $2 total at stake)
+- Each agent decides how much of their $1 to "offer" to the other agent. (They keep the remainder.)
+- Each agent also decides how much they will "demand" the other agent offer them.
+- All offers and demands are revealed simultaneously.
+- If both offers are above their corresponding demands, the agents split the $2 per the offer amounts.
+- If either offer is below its corresponding demand, both agents receive $0.
+The environments below implement several variants of Dual Ultimatum game.
+- A basic iterated game for a single learning agent, playing against a bot that does not learn.
+- An iterated game for two agents, both of which can potentially be learning agents.
+- Tournaments in which four or more agents take turns playing each other. In a tournament environment,
+    rewards are based on the final rankings, rather than simply being each agent's cumulative score. (For instance,
+    only the first-place finisher, after N rounds, might receive a non-zero reward.)
+"""
+
 from copy import copy
 import numpy as np
 import pandas as pd
@@ -9,7 +30,7 @@ import torch
 import gym
 from gym import spaces
 
-from multiagent_rl.algos.bot_agents import *
+from multiagent_rl.agents.bot_agents import *
 
 
 EPS = 1e-8
