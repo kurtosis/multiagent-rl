@@ -1,8 +1,7 @@
-from multiagent_rl.algos.bot_agents import *
-from multiagent_rl.algos.rsac_two_agent import *
-
-
-from multiagent_rl.environments.tournament_env import *
+from multiagent_rl.agents.bot_agents import *
+from multiagent_rl.agents.agents import *
+from multiagent_rl.environments import *
+from multiagent_rl.trainers.rsac_two_agent import *
 
 rsac_agent_kwargs = {
     "hidden_size_pi": 8,
