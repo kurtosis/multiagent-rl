@@ -21,11 +21,8 @@ The environments below implement several variants of Dual Ultimatum game.
 
 from copy import copy
 import numpy as np
-import pandas as pd
-import random
 from random import sample
 from scipy.stats import rankdata
-import torch
 
 import gym
 from gym import spaces

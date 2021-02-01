@@ -4,8 +4,6 @@ from multiagent_rl.algos.rsac_two_agent import *
 
 from multiagent_rl.environments.tournament_env import *
 
-# agent_fns=[RSACAgent, DistribBot]
-agent_fns = [RSACAgent, ConstantBot]
 rsac_agent_kwargs = {
     "hidden_size_pi": 8,
     "hidden_size_q": 8,
@@ -18,10 +16,18 @@ rsac_agent_kwargs = {
 
 constantbot_kwargs = {"offer": 0.2, "demand": 0.4, "fixed": True}
 
-agent_kwargs = [rsac_agent_kwargs, constantbot_kwargs]
+
+# agent_fns=[RSACAgent, DistribBot]
+# agent_kwargs = [rsac_agent_kwargs, {}]
+
+# agent_fns = [RSACAgent, ConstantBot]
+# agent_kwargs = [rsac_agent_kwargs, constantbot_kwargs]
 
 # agent_fns=[DistribBot, DistribBot]
 # agent_kwargs = [{}, {}]
+
+agent_fns = [RSACAgent, RSACAgent]
+agent_kwargs = [rsac_agent_kwargs, rsac_agent_kwargs]
 
 two_agent_rsac(
     env_fn=DualUltimatum,
