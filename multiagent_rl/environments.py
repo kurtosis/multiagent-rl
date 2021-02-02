@@ -60,12 +60,6 @@ class ConstantDualUltimatum(gym.Env):
         self.observation_space = spaces.Box(
             low=0.0, high=1.0, shape=(5,), dtype=np.float32
         )
-        # self.observation_space = spaces.Tuple(
-        #     (
-        #         spaces.Box(low=0.0, high=1.0, shape=(5,), dtype=np.float32),
-        #         # spaces.Discrete(2),
-        #     )
-        # )
         self.ep_len = ep_len
         self.current_turn = 0
         if reward == "l2":
@@ -306,7 +300,7 @@ def assign_match_pairs(num_agents):
 
 
 class RoundRobinTournament(gym.Env):
-    """An environment for of a tournament of some pairwise game."""
+    """An environment for of a Dual Ultimatum tournament."""
 
     def __init__(
         self,
@@ -362,21 +356,20 @@ class RoundRobinTournament(gym.Env):
         # opponent id, OHE??? useful when we add bots, or other differences?
 
         # Create tuple of observations for all agents. Extend match-level obs with tournament-level obs features
-        self.observation_space = spaces.Tuple(
-            [
-                spaces.Tuple(
-                    [space for space in self.match_env_list[0].observation_space[0]]
-                    + [
-                        spaces.Discrete(self.num_rounds),
-                        spaces.Box(
+        def agent_observation_space():
+            return spaces.Tuple([spaces.Box(low=0.0, high=1.0, shape=(5,), dtype=np.float32),
+             spaces.Discrete(self.num_rounds),
+             spaces.Box(
                             low=0.0,
                             high=np.inf,
                             shape=(self.num_agents + 1,),
                             dtype=np.float32,
                         ),
-                    ]
-                )
-                for _ in range(self.num_agents)
+             ])
+
+        self.observation_space = spaces.Tuple(
+            [
+                agent_observation_space() for _ in range(self.num_agents)
             ]
         )
 

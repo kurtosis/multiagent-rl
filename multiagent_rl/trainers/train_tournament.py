@@ -3,10 +3,9 @@ import time
 
 from torch.optim import Adam
 
-from multiagent_rl.environments.tournament_env import *
+from multiagent_rl.environments import *
 from multiagent_rl.agents import *
 from multiagent_rl.buffers import *
-# from multiagent_rl.algos.training import count_vars
 from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.utils.evaluation_utils import *
 
@@ -57,6 +56,8 @@ def train_tournament(
 
     num_agents = len(agent_fns)
     env_kwargs['num_agents'] = num_agents
+    if agent_kwargs is None:
+        agent_kwargs = [{}]*num_agents
     assert len(agent_kwargs) == num_agents
 
     logger = EpochLogger(**logger_kwargs)

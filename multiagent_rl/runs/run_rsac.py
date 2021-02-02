@@ -1,4 +1,4 @@
-from multiagent_rl.agents.agents import RSACAgent
+from multiagent_rl.agents.agents import RSACAgent, SACAgent
 from multiagent_rl.environments import *
 from multiagent_rl.trainers.train_rsac import train_rsac
 
@@ -20,15 +20,15 @@ for i in range(n_runs):
         save_freq=10,
         num_test_episodes=100,
         max_episode_len=10,
-        env_fn=DistribDualUltimatum,
+        env_fn=ConstantDualUltimatum,
         env_kwargs={"ep_len": 10, "fixed": False},
-        agent_fn=RSACAgent,
-        agent_kwargs={
-            "hidden_size_pi": 8,
-            "hidden_size_q": 8,
-            "mlp_layers_pi": (32, 32),
-            "mlp_layers_q": (32, 32, 32),
-        },
+        agent_fn=SACAgent,
+        # agent_kwargs={
+        #     "hidden_size_pi": 8,
+        #     "hidden_size_q": 8,
+        #     "mlp_layers_pi": (32, 32),
+        #     "mlp_layers_q": (32, 32, 32),
+        # },
         gamma=0.99,
         alpha=0.05,
         update_alpha_after=15000,

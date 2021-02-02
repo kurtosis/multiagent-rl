@@ -61,14 +61,17 @@ def train_rsac(
     agent = agent_fn(
         obs_space=env.observation_space, action_space=env.action_space, **agent_kwargs,
     )
-    agent_target = deepcopy(agent)
+    q1_targ = deepcopy(agent.q1)
+    q2_targ = deepcopy(agent.q2)
+    q_params = chain(agent.q1.parameters(), agent.q2.parameters())
+    targ_params = chain(q1_targ.parameters(), q2_targ.parameters())
+
+    # Freeze targets so they are not updated by optimizers
+    for p in targ_params:
+        p.requires_grad = False
 
     log_alpha = torch.tensor(np.log(alpha), requires_grad=True)
     q_params = chain(agent.q1.parameters(), agent.q2.parameters())
-
-    # Freeze target mu, Q so they are not updated by optimizers
-    for p in agent_target.parameters():
-        p.requires_grad = False
 
     var_counts = tuple(count_vars(module) for module in [agent.pi, agent.q1])
     logger.log(
@@ -114,8 +117,8 @@ def train_rsac(
             obs_padded = pad(obs, (0, 0, 0, 0, 0, 1), "constant", 0)
             act_padded, logprob_padded = agent.pi(obs_padded)
 
-            q1_target = agent_target.q1(torch.cat([obs_padded, act_padded], dim=-1))
-            q2_target = agent_target.q2(torch.cat([obs_padded, act_padded], dim=-1))
+            q1_target = q1_targ(torch.cat([obs_padded, act_padded], dim=-1))
+            q2_target = q2_targ(torch.cat([obs_padded, act_padded], dim=-1))
             q_target_padded = torch.min(q1_target, q2_target)
 
             # Ensure q_target has correct shape in both stepwise and batch processing.
@@ -168,9 +171,9 @@ def train_rsac(
         logger.store(LossPi=loss_pi.item(), **pi_info)
 
         with torch.no_grad():
-            for p, p_target in zip(agent.parameters(), agent_target.parameters()):
-                p_target.data.mul_(polyak)
-                p_target.data.add_((1 - polyak) * p.data)
+            for p, p_target in zip(q_params, targ_params):
+                p_target.data.mul_(self.polyak)
+                p_target.data.add_((1 - self.polyak) * p.data)
 
         # Update alpha
         if t_total >= update_alpha_after:
@@ -242,11 +245,6 @@ def train_rsac(
             t_total += 1
 
         deterministic_policy_test()
-
-        # Save model at end of epoch
-        if t == steps_per_epoch - 1:
-            if (epoch % save_freq == 0) or (epoch == epochs - 1):
-                logger.save_state({"env": env}, None)
 
         # Log info about epoch
         logger.log_tabular("Epoch", epoch)

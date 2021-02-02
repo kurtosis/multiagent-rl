@@ -1,4 +1,4 @@
-from multiagent_rl.agents.agents import RSACAgent, SACAgent
+from multiagent_rl.agents.agents import SACAgent
 from multiagent_rl.environments import *
 from multiagent_rl.trainers.train_sac import train_sac
 from multiagent_rl.trainers.train_rsac import train_rsac
