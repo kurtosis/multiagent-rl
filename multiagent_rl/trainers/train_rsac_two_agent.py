@@ -3,9 +3,6 @@ import time
 
 from torch.optim import Adam
 
-from multiagent_rl.algos.agents import *
-from multiagent_rl.algos.buffers import *
-from multiagent_rl.algos.training import count_vars
 from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.utils.evaluation_utils import *
 
@@ -71,6 +68,7 @@ def train_rsac_two_agent(
 
     env.seed(seed)
     test_env.seed(seed)
+    # A different seed must be set for each element of action_space to avoid identical values.
     for i, space in enumerate(env.action_space):
         space.seed(seed + i)
     for i, space in enumerate(test_env.action_space):
@@ -118,7 +116,6 @@ def train_rsac_two_agent(
     start_time = time.time()
     # Begin training phase.
     t_total = 0
-    update_time = 0.0
     for epoch in range(epochs):
         obs, episode_return, episode_length = reset_all()
         for t in range(steps_per_epoch):
@@ -133,7 +130,7 @@ def train_rsac_two_agent(
                     for i in range(NUM_AGENTS)
                 ]
             act = np.stack(act)
-            logger.store(ActOffer=act[0][0], ActDemand=act[0][1])
+            logger.store(ActOffer1=act[0][0], ActDemand1=act[0][1])
             # Step environment given latest agent action
             obs_next, rwd, done, _ = env.step(act)
 
@@ -149,7 +146,7 @@ def train_rsac_two_agent(
 
             # check if episode is over
             if done:
-                logger.store(EpRet=episode_return[0], EpLen=episode_length)
+                logger.store(EpRet1=episode_return[0], EpLen=episode_length)
                 obs, episode_return, episode_length = reset_all()
 
             if t_total >= update_after and t_total % update_every == 0:
@@ -163,9 +160,9 @@ def train_rsac_two_agent(
 
         # Log info about epoch
         logger.log_tabular("Epoch", epoch)
-        logger.log_tabular("EpRet", with_min_and_max=True)
-        logger.log_tabular("ActOffer", with_min_and_max=True)
-        logger.log_tabular("ActDemand", with_min_and_max=True)
+        logger.log_tabular("EpRet1", with_min_and_max=True)
+        logger.log_tabular("ActOffer1", with_min_and_max=True)
+        logger.log_tabular("ActDemand1", with_min_and_max=True)
         logger.log_tabular("TestEpRet1", with_min_and_max=True)
         logger.log_tabular("TestEpRet2", with_min_and_max=True)
         logger.log_tabular("TestActOffer1", with_min_and_max=True)
@@ -175,9 +172,5 @@ def train_rsac_two_agent(
         logger.log_tabular("EpLen", average_only=True)
         logger.log_tabular("TestEpLen", average_only=True)
         logger.log_tabular("TotalEnvInteracts", (epoch + 1) * steps_per_epoch)
-        # logger.log_tabular("Q1Vals", with_min_and_max=True)
-        # logger.log_tabular("Q2Vals", with_min_and_max=True)
-        # logger.log_tabular("LossPi", average_only=True)
-        # logger.log_tabular("LossQ", average_only=True)
         logger.log_tabular("Time", time.time() - start_time)
         logger.dump_tabular()

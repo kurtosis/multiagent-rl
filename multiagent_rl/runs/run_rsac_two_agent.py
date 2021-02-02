@@ -1,7 +1,7 @@
 from multiagent_rl.agents.bot_agents import *
 from multiagent_rl.agents.agents import *
 from multiagent_rl.environments import *
-from multiagent_rl.trainers.rsac_two_agent import *
+from multiagent_rl.trainers.train_rsac_two_agent import train_rsac_two_agent
 
 rsac_agent_kwargs = {
     "hidden_size_pi": 8,
@@ -28,14 +28,14 @@ constantbot_kwargs = {"offer": 0.2, "demand": 0.4, "fixed": True}
 agent_fns = [RSACAgent, RSACAgent]
 agent_kwargs = [rsac_agent_kwargs, rsac_agent_kwargs]
 
-two_agent_rsac(
+train_rsac_two_agent(
     env_fn=DualUltimatum,
     env_kwargs=dict(),
     agent_fns=agent_fns,
     agent_kwargs=agent_kwargs,
     seed=0,
-    steps_per_epoch=400,
-    epochs=100,
+    steps_per_epoch=100,
+    epochs=10,
     batch_size=100,
     start_steps=100,
     update_after=10,

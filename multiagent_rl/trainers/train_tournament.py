@@ -31,8 +31,8 @@ def train_tournament(
     """
     Training loop for the multi-agent RoundRobinTournament environment. Note: many objects and functions are assumed
     to be implemented as agent attributes/methods whereas in single-agent RL they might be implemented in the overall
-    training loop. (Such as replay buffers, optimizers, and update methods). In addition, many parameters (such as
-    learning rates) should be passed as keyword args to each agent.
+    training loop. (Such as buffers, optimizers, and update methods). In addition, many parameters (such as
+    learning rates) are passed as keyword args to each agent.
 
     Args:
         env_fn: a function which creates a copy of the environment. Must satisfy the OpenAI Gym API.
@@ -55,7 +55,6 @@ def train_tournament(
         save_freq: how frequently (by number of epochs) to save current agents.
     """
 
-    # Note: this function is designed specifically for two-agent environments.
     num_agents = len(agent_fns)
     env_kwargs['num_agents'] = num_agents
     assert len(agent_kwargs) == num_agents
@@ -118,7 +117,6 @@ def train_tournament(
     start_time = time.time()
     # Begin training phase.
     t_total = 0
-    update_time = 0.0
     for epoch in range(epochs):
         obs, episode_return, episode_length = reset_all()
         for t in range(steps_per_epoch):
@@ -175,9 +173,5 @@ def train_tournament(
         logger.log_tabular("EpLen", average_only=True)
         logger.log_tabular("TestEpLen", average_only=True)
         logger.log_tabular("TotalEnvInteracts", (epoch + 1) * steps_per_epoch)
-        # logger.log_tabular("Q1Vals", with_min_and_max=True)
-        # logger.log_tabular("Q2Vals", with_min_and_max=True)
-        # logger.log_tabular("LossPi", average_only=True)
-        # logger.log_tabular("LossQ", average_only=True)
         logger.log_tabular("Time", time.time() - start_time)
         logger.dump_tabular()

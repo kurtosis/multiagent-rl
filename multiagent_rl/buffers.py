@@ -27,7 +27,7 @@ def merge_shape(shape1, shape2=None):
 
 class EpisodeBuffer:
     """
-    Stores completed episodes for use with recurrent actor/critic networks. Each variable
+    Stores completed episodes for training recurrent actor/critic networks. Each variable
     is stored as a tensor for fast sampling. Once buffer is full, older episodes are overwritten.
     """
 
@@ -99,3 +99,55 @@ class EpisodeBuffer:
             "rwd": np.zeros_like(self.current_episode["rwd"], dtype=np.float32),
             "done": np.ones_like(self.current_episode["done"], dtype=np.float32),
         }
+
+
+class TransitionBuffer:
+    """
+    Stores individual transitions for training non-recurrent actor/critic networks.
+    Once buffer is full, older episodes are overwritten.
+    """
+
+    def __init__(self, obs_dim, act_dim, max_size):
+        self.obs = np.zeros(merge_shape(max_size, obs_dim), dtype=np.float32)
+        self.act = np.zeros(merge_shape(max_size, act_dim), dtype=np.float32)
+        self.rwd = np.zeros(max_size, dtype=np.float32)
+        self.obs_next = np.zeros(merge_shape(max_size, obs_dim), dtype=np.float32)
+        self.done = np.zeros(max_size, dtype=np.float32)
+        self.ptr = 0
+        self.max_size = max_size
+        self.filled_size = 0
+        self.full = False
+
+    def store(self, obs, act, rwd, obs_next, done):
+        """Add current step variables to buffer."""
+        # Cycle through buffer, overwriting oldest entry.
+        # Note that buffer is never flushed, unlike on-policy methods.
+        if self.ptr >= self.max_size:
+            self.ptr = self.ptr % self.max_size
+            self.full = True
+        self.obs[self.ptr] = obs
+        self.act[self.ptr] = act
+        self.rwd[self.ptr] = rwd
+        self.obs_next[self.ptr] = obs_next
+        self.done[self.ptr] = done
+        self.ptr += 1
+        if not self.full:
+            self.filled_size += 1
+
+    def sample_batch(self, batch_size=128):
+        """
+        Return needed variables (as tensors) over episodes in buffer.
+        Reset pointers for next epoch.
+        """
+        # return needed variables as a dictionary
+        sample_indexes = np.random.randint(0, self.filled_size, batch_size)
+        data = {
+            "obs": torch.as_tensor(self.obs[sample_indexes], dtype=torch.float32),
+            "act": torch.as_tensor(self.act[sample_indexes], dtype=torch.float32),
+            "rwd": torch.as_tensor(self.rwd[sample_indexes], dtype=torch.float32),
+            "obs_next": torch.as_tensor(
+                self.obs_next[sample_indexes], dtype=torch.float32
+            ),
+            "done": torch.as_tensor(self.done[sample_indexes], dtype=torch.float32),
+        }
+        return data

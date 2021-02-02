@@ -1,16 +1,16 @@
 from itertools import chain
+import time
+
 from torch.optim import Adam
 
-from multiagent_rl.algos.agents import *
-from multiagent_rl.algos.buffers import *
-# from multiagent_rl.algos.buffers import EpisodeBuffer, ReplayBuffer
-from multiagent_rl.algos.training import count_vars
-
+from multiagent_rl.agents.agents import *
+from multiagent_rl.buffers import TransitionBuffer
+from multiagent_rl.trainers.train_rsac import count_vars
 from multiagent_rl.utils.logx import EpochLogger
 from multiagent_rl.utils.evaluation_utils import *
 
 
-def sac(
+def train_sac(
     env_fn,
     agent_fn=SACAgent,
     seed=0,
@@ -39,14 +39,8 @@ def sac(
     alpha=0.05,
     update_alpha_after=5000,
     target_entropy=-4.0,
-    save_q_every=1000,
-    q_filename="/Users/kurtsmith/research/multiagent-rl/data/q",
 ):
     """Run SAC training."""
-    # Initialize environment, agent, auxiliary objects
-
-    q1_filename = q_filename + "_1_map.csv"
-    q2_filename = q_filename + "_2_map.csv"
 
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
@@ -65,7 +59,7 @@ def sac(
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape[0]
     agent = agent_fn(
-        observation_space=env.observation_space,
+        obs_space=env.observation_space,
         action_space=env.action_space,
         **agent_kwargs,
     )
@@ -84,7 +78,6 @@ def sac(
     )
 
     buf = TransitionBuffer(obs_dim, act_dim, replay_size)
-    # buf = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
 
     pi_optimizer = Adam(agent.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(q_params, lr=q_lr)
@@ -111,9 +104,7 @@ def sac(
             data["obs"],
             data["act"],
             data["rwd"],
-            # data["rew"],
             data["obs_next"],
-            # data["obs2"],
             data["done"],
         )
 
@@ -137,24 +128,15 @@ def sac(
 
         return loss_q, loss_info
 
-    # q_time = 0.0
-    # pi_time = 0.0
-    # target_time = 0.0
-    # batch_time = 0.0
-
-    # def update(q_time, pi_time, target_time):
     def update():
         # Get training data from buffer
         data = buf.sample_batch(batch_size)
 
         # Update Q function
-        # t0 = time.time()
         q_optimizer.zero_grad()
         loss_q, loss_info = compute_loss_q(data)
         loss_q.backward()
         q_optimizer.step()
-        # t1 = time.time()
-        # q_time += (t1-t0)
 
         logger.store(LossQ=loss_q.item(), **loss_info)
 
@@ -170,8 +152,6 @@ def sac(
         # Unfreeze Q params after policy update
         for p in q_params:
             p.requires_grad = True
-        # t2 = time.time()
-        # pi_time += (t2-t1)
 
         logger.store(LossPi=loss_pi.item(), **pi_info)
 
@@ -179,8 +159,6 @@ def sac(
             for p, p_target in zip(agent.parameters(), agent_target.parameters()):
                 p_target.data.mul_(polyak)
                 p_target.data.add_((1 - polyak) * p.data)
-        # t3 = time.time()
-        # target_time += (t3-t2)
 
         # Update alpha
         if t_total >= update_alpha_after:
@@ -190,8 +168,6 @@ def sac(
             alpha_optimizer.zero_grad()
             loss_alpha.backward()
             alpha_optimizer.step()
-
-        # return q_time, pi_time, target_time
 
     def deterministic_policy_test():
         for _ in range(num_test_episodes):
@@ -247,28 +223,9 @@ def sac(
                     update()
                     alpha = log_alpha.exp()
 
-                # q_time, pi_time, target_time = update(q_time, pi_time, target_time)
-                # n_updates += 1
-                # update_end = time.time()
-                # update_time += update_end - update_start
-                # total_time = update_end - start_time
-                # print(f't total {t_total}; t {t}; epoch {epoch}')
-                # print(f'update time {update_time}')
-                # print(f'total time {total_time}')
-                # print('---')
-
-            if (t_total + 1) % save_q_every == 0:
-                save_q_map(agent.q1, q1_filename, t_total)
-                save_q_map(agent.q2, q2_filename, t_total)
-
             t_total += 1
 
         deterministic_policy_test()
-
-        # # # Look at pi, q functions
-        # batch = buf.sample_batch(batch_size)
-        # eval_q_td3(batch, agent)
-        # eval_a(batch, agent)
 
         # Save model at end of epoch
         if t == steps_per_epoch - 1:
@@ -292,12 +249,3 @@ def sac(
         logger.log_tabular("LossQ", average_only=True)
         logger.log_tabular("Time", time.time() - start_time)
         logger.dump_tabular()
-        # print(f'update_time {update_time}')
-        # print(f'q_time {q_time}')
-        # print(f'pi_time {pi_time}')
-        # print(f'target_time {target_time}')
-
-        # Look at pi, q functions
-        # batch = buf.sample_batch(batch_size)
-        # eval_q_vs_a_2(batch, agent)
-        # eval_a(batch, agent)
