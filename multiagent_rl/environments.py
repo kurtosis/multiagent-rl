@@ -33,37 +33,6 @@ from multiagent_rl.agents.bot_agents import *
 EPS = 1e-8
 
 
-class OneHot(gym.Space):
-    """
-    One-hot space. Used as the observation space.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.n = n
-
-    def sample(self):
-        return np.random.multinomial(1, [1.0 / self.n] * self.n)
-
-    def contains(self, x):
-        return (
-            isinstance(x, np.ndarray)
-            and x.shape == (self.n,)
-            and np.all(np.logical_or(x == 0, x == 1))
-            and np.sum(x) == 1
-        )
-
-    @property
-    def shape(self):
-        return (self.n,)
-
-    def __repr__(self):
-        return "OneHot(%d)" % self.n
-
-    def __eq__(self, other):
-        return self.n == other.n
-
-
 class ConstantDualUltimatum(gym.Env):
     """A single-agent environment consisting of a dual ultimatum game against a constant bot"""
 
@@ -223,9 +192,8 @@ class DistribDualUltimatum(gym.Env):
         self.observation_space = spaces.Box(
             low=0.0, high=1.0, shape=(5,), dtype=np.float32
         )
-        self.rewards = self._ultimatum_rewards
 
-    def _ultimatum_rewards(self, action, opp_action):
+    def _reward(self, action, opp_action):
         offer, demand = action
         opponent_offer, opponent_demand = opp_action
         if offer + EPS >= opponent_demand and opponent_offer + EPS >= demand:
@@ -236,7 +204,7 @@ class DistribDualUltimatum(gym.Env):
 
     def step(self, action):
         opp_action = self.opponent.act()
-        rewards = self.rewards(action, opp_action)
+        reward = self._reward(action, opp_action)
         obs = np.concatenate((opp_action, action, [0]))
         if self.current_turn == (self.ep_len - 1):
             done = 1
@@ -245,7 +213,7 @@ class DistribDualUltimatum(gym.Env):
             done = 0
             self.current_turn += 1
 
-        return obs, rewards, done, {}
+        return obs, reward, done, {}
 
     def reset(self):
         self.current_turn = 0
@@ -271,7 +239,7 @@ class DistribDualUltimatum(gym.Env):
 class DualUltimatum(gym.Env):
     """A two-agent environment consisting of a dual ultimatum game between any two agents."""
 
-    def __init__(self, ep_len=10, reward="ultimatum"):
+    def __init__(self, ep_len=10):
         super().__init__()
         self.ep_len = ep_len
         self.current_turn = 0
@@ -287,16 +255,8 @@ class DualUltimatum(gym.Env):
                 for _ in range(2)
             ]
         )
-        if reward == "l2":
-            self.rewards = self._l2_rewards
-        elif reward == "l1":
-            self.rewards = self._l1_rewards
-        elif reward == "l1_const":
-            self.rewards = self._l1_const_rewards
-        else:
-            self.rewards = self._ultimatum_rewards
 
-    def _ultimatum_rewards(self, actions):
+    def _rewards(self, actions):
         offer_0, demand_0 = actions[0]
         offer_1, demand_1 = actions[1]
 
@@ -308,33 +268,8 @@ class DualUltimatum(gym.Env):
             rewards = np.array([0, 0])
         return rewards
 
-    def _l1_rewards(self, actions):
-        """Simple reward for testing"""
-        offer_0, _ = actions[0, :]
-        offer_1, _ = actions[1, :]
-        l1 = -np.abs(offer_0 - offer_1)
-        rewards = np.array([l1, l1])
-        return rewards
-
-    def _l2_rewards(self, actions):
-        """Simple reward for testing"""
-        offer_0, _ = actions[0, :]
-        offer_1, _ = actions[1, :]
-        l2 = -((offer_0 - offer_1) ** 2)
-        rewards = np.array([l2, l2])
-        return rewards
-
-    def _l1_const_rewards(self, actions, target=0.3):
-        """Simple reward for testing"""
-        offer_0, _ = actions[0, :]
-        offer_1, _ = actions[1, :]
-        r_0 = -np.abs(offer_0 - target)
-        r_1 = -np.abs(offer_1 - target)
-        rewards = np.array([r_0, r_1])
-        return rewards
-
     def step(self, actions):
-        rewards = self.rewards(actions)
+        rewards = self._rewards(actions)
         obs = np.array(
             [
                 np.concatenate((actions[0], actions[1])),
@@ -356,58 +291,6 @@ class DualUltimatum(gym.Env):
         # Create init state obs, with flag indicating this is the first step
         obs = np.zeros((2, 5))
         obs[:, -1] = 1
-        return obs
-
-    def render(self, mode="human"):
-        pass
-
-
-class MatrixGame(gym.Env):
-    """An environment consisting of a matrix game with stochastic outcomes"""
-
-    NUM_ACTIONS = 3
-    NUM_STATES = NUM_ACTIONS ** 2 + 1
-
-    def __init__(
-        self,
-        payout_mean=np.array([[10, 5, -5], [0, 0, 5], [20, -5, 0]]),
-        payout_std=np.array([[0, 0, 0], [0, 0, 0], [0, 20, 20]]),
-    ):
-        super().__init__()
-        self.num_actions = 3
-        self.action_space = spaces.Tuple(
-            [spaces.Discrete(self.num_actions) for _ in range(2)]
-        )
-        self.observation_space = spaces.Tuple(
-            [OneHot(self.NUM_STATES) for _ in range(2)]
-        )
-        self.payout_mean_matrix = payout_mean
-        self.payout_std_matrix = payout_std
-
-    def step(self, actions):
-        a0, a1 = actions
-
-        reward = np.array(
-            [
-                self.payout_mean_matrix[a0, a1]
-                + self.payout_std_matrix[a0, a1] * np.random.randn(1)[0],
-                self.payout_mean_matrix[a1, a0]
-                + self.payout_std_matrix[a1, a0] * np.random.randn(1)[0],
-            ]
-        )
-
-        obs0 = np.zeros(self.NUM_STATES)
-        obs1 = np.zeros(self.NUM_STATES)
-        obs0[a0 * self.NUM_ACTIONS + a1] = 1
-        obs1[a1 * self.NUM_ACTIONS + a0] = 1
-        obs = np.array([obs0, obs1])
-        done = False
-        return obs, reward, done, {}
-
-    def reset(self):
-        init_state = np.zeros(self.NUM_STATES)
-        init_state[-1] = 1
-        obs = np.array([init_state, init_state])
         return obs
 
     def render(self, mode="human"):
@@ -498,10 +381,10 @@ class RoundRobinTournament(gym.Env):
         )
 
     def _final_reward(self):
+        """Reward based on ranking at end of tournament."""
         if self.score_reward:
             return self.scores
         else:
-            # print(f'final scores {self.scores}')
             ranks = rankdata(-self.scores)
             reward = (ranks <= self.top_cutoff) * self.top_reward
             if self.bottom_cutoff is not None:

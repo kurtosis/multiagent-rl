@@ -109,38 +109,3 @@ class DistribBot(AgentBot):
             1 + np.tanh(self.mean_tanh_demand + self.std_demand * np.random.randn(1)[0])
         ) / 2
         return np.array((offer, demand))
-
-
-class MimicBot(AgentBot):
-    def __init__(self):
-        super().__init__()
-
-    def act(self, last_offer=None, last_demand=None):
-        if last_offer is None:
-            last_offer = np.random.rand(1)
-        if last_demand is None:
-            last_demand = np.random.rand(1)
-        return np.array((last_offer, last_demand))
-
-
-class BenchmarkBot(AgentBot):
-    def __init__(self, benchmark=1):
-        super().__init__()
-        self.benchmark = benchmark
-        self.cum_total = 0
-
-
-class GreedFearBot(AgentBot):
-    def __init__(self, greed=1, fear=1):
-        super().__init__()
-        self.greed = greed
-        self.fear = fear
-
-    def act(self, last_offer, last_demand, accepted):
-        if accepted:
-            offer = last_offer - 0
-            demand = last_demand + 0
-        else:
-            offer = last_offer + 0
-            demand = last_demand - 0
-        return np.array((offer, demand))
