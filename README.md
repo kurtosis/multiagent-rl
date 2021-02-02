@@ -1,6 +1,6 @@
 # multiagent-rl
 
-This repository contains several classes for training reinforcement learning agents in a multiagent 
+This repository contains several classes for training reinforcement learning agents in a multi-agent
 environment based on the [Ultimatum Game](https://en.wikipedia.org/wiki/Ultimatum_game). 
 The core training method is based on the [Recurrent Deterministic Policy Gradient](https://arxiv.org/abs/1512.04455)
 for LSTM-based agents. However, stochastic agents, based on the 
