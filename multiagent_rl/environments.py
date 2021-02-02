@@ -357,20 +357,21 @@ class RoundRobinTournament(gym.Env):
 
         # Create tuple of observations for all agents. Extend match-level obs with tournament-level obs features
         def agent_observation_space():
-            return spaces.Tuple([spaces.Box(low=0.0, high=1.0, shape=(5,), dtype=np.float32),
-             spaces.Discrete(self.num_rounds),
-             spaces.Box(
-                            low=0.0,
-                            high=np.inf,
-                            shape=(self.num_agents + 1,),
-                            dtype=np.float32,
-                        ),
-             ])
+            return spaces.Tuple(
+                [
+                    spaces.Box(low=0.0, high=1.0, shape=(5,), dtype=np.float32),
+                    spaces.Discrete(self.num_rounds),
+                    spaces.Box(
+                        low=0.0,
+                        high=np.inf,
+                        shape=(self.num_agents + 1,),
+                        dtype=np.float32,
+                    ),
+                ]
+            )
 
         self.observation_space = spaces.Tuple(
-            [
-                agent_observation_space() for _ in range(self.num_agents)
-            ]
+            [agent_observation_space() for _ in range(self.num_agents)]
         )
 
     def _final_reward(self):

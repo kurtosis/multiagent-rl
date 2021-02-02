@@ -1,20 +1,22 @@
+import time
+
 from torch.nn.functional import pad
 
-from multiagent_rl.algos.rdpg import *
-from multiagent_rl.environments.tournament_env import *
+from multiagent_rl.buffers import *
+from multiagent_rl.environments import *
 
 
-def test_rdpg_buffer(
+def test_episode_buffer(
     obs_dim=5,
     act_dim=2,
-    max_buffer_len=100000,
-    ep_len=3,
+    ep_len=10,
+    max_episodes=100000,
     num_ep=1000,
-    sample_size=100,
+    batch_size=100,
     verbose=False,
 ):
-    """Fill an RDPG buffer with sample data and verify it can be read from correctly."""
-    buffer = EpisodeBuffer(max_buffer_len)
+    """Fill an EpisodeBuffer with sample data and verify it can be read from correctly."""
+    buffer = EpisodeBuffer(obs_dim, act_dim, ep_len, max_episodes)
     t0 = time.time()
     for i_ep in range(num_ep):
         for i_turn in range(ep_len):
@@ -45,7 +47,7 @@ def test_rdpg_buffer(
         if not buffer.full:
             print(f"Empty episode: {buffer.episodes[num_ep]}")
     t0 = time.time()
-    sampled_episodes = buffer.sample_episodes(sample_size=sample_size)
+    sampled_episodes = buffer.sample_episodes(batch_size=batch_size)
     t1 = time.time()
     time_sample = t1 - t0
     if verbose:
@@ -91,7 +93,7 @@ def train_LSTMEstimator(
         p3d = (0, 0, 0, 0, 0, 1)
 
         def best_action(obs, obs_next):
-            cums = torch.cumsum(obs, 0) / torch.arange(1, ep_len+1).view(ep_len, 1, 1)
+            cums = torch.cumsum(obs, 0) / torch.arange(1, ep_len + 1).view(ep_len, 1, 1)
             cums = cums[1:, :, :]
             return pad(cums, p3d, "constant", 0)
 

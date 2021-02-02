@@ -3,10 +3,6 @@ import numpy as np
 import torch
 from torch.nn.functional import pad
 
-"""
-Classes for buffers that are used to store training data.
-"""
-
 
 def merge_shape(shape1, shape2=None):
     if np.isscalar(shape1):

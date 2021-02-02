@@ -40,7 +40,7 @@ def train_rsac(
     update_alpha_after=5000,
     target_entropy=-4.0,
 ):
-    """Run Recurrent-SAC training for single-agent RL."""
+    """Training loop for Recurrent-SAC, single-agent RL."""
 
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())

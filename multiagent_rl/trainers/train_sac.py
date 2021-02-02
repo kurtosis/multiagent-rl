@@ -40,7 +40,7 @@ def train_sac(
     update_alpha_after=5000,
     target_entropy=-4.0,
 ):
-    """Run SAC training."""
+    """Training loop for SAC, single-agent RL."""
 
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
@@ -59,9 +59,7 @@ def train_sac(
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape[0]
     agent = agent_fn(
-        obs_space=env.observation_space,
-        action_space=env.action_space,
-        **agent_kwargs,
+        obs_space=env.observation_space, action_space=env.action_space, **agent_kwargs,
     )
     agent_target = deepcopy(agent)
 
