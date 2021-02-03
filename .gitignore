@@ -132,3 +132,4 @@ dmypy.json
 # My additions
 .idea/
 data/
+.DS_Store

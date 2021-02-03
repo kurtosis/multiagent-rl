@@ -39,11 +39,9 @@ class ConstantDualUltimatum(gym.Env):
     def __init__(
         self,
         ep_len=10,
-        reward="ultimatum",
         opponent_offer=None,
         opponent_demand=None,
         fixed=True,
-        reward_penalty=0.01,
     ):
         super().__init__()
         self.fixed = fixed
@@ -62,20 +60,8 @@ class ConstantDualUltimatum(gym.Env):
         )
         self.ep_len = ep_len
         self.current_turn = 0
-        if reward == "l2":
-            self.reward = self._l2_reward
-        elif reward == "l1":
-            self.reward = self._l1_reward
-        elif reward == "l1_const":
-            self.reward = self._l1_const_reward
-        elif reward == "non_flat":
-            self.reward_penalty = reward_penalty
-            self.reward = self._non_flat_reward
-        else:
-            self.reward = self._ultimatum_reward
 
-    def _ultimatum_reward(self, action):
-        """The standard rwd based on Ultimatum rules."""
+    def _reward(self, action):
         offer, demand = action
         if offer + EPS >= self.opponent_demand and self.opponent_offer + EPS >= demand:
             reward = (1 - offer) + self.opponent_offer
@@ -83,44 +69,8 @@ class ConstantDualUltimatum(gym.Env):
             reward = 0
         return reward
 
-    def _non_flat_reward(self, action):
-        """Reproduce ultimatum reward for successful deals but include a gradient (non-zero reward)
-        for unsuccesful deals so the agent can still learn."""
-        offer, demand = action
-        reward = 0.0
-        multiplier = 1.0
-        if offer + EPS >= self.opponent_demand:
-            reward += 1 - offer
-        else:
-            reward += (1 - self.opponent_demand) * offer / self.opponent_demand
-            multiplier *= self.reward_penalty
-        if self.opponent_offer + EPS >= demand:
-            reward += self.opponent_offer
-        else:
-            reward += self.opponent_offer * (1 - demand) / (1 - self.opponent_offer)
-            multiplier *= self.reward_penalty
-        return multiplier * reward
-
-    def _l1_reward(self, action):
-        """Simple reward for testing"""
-        offer_0, _ = action
-        reward = -np.abs(offer_0 - self.opponent_demand)
-        return reward
-
-    def _l2_reward(self, action):
-        """Simple reward for testing"""
-        offer_0, _ = action[0, :]
-        reward = -((offer_0 - self.opponent_demand) ** 2)
-        return reward
-
-    def _l1_const_reward(self, action, target=0.3):
-        """Simple reward for testing"""
-        offer_0, _ = action[0, :]
-        reward = -np.abs(offer_0 - target)
-        return reward
-
     def step(self, action):
-        reward = self.reward(action)
+        reward = self._reward(action)
         # Add flag indicating this is not the first step
         obs = np.array(
             [self.opponent_offer, self.opponent_demand, action[0], action[1], 0]
@@ -509,15 +459,6 @@ class RoundRobinTournament(gym.Env):
             opponent=copy(self.agent_opponent),
             score=copy(np.round(self.scores, 3)),
         )
-
-        # env_state = pd.DataFrame(
-        #     dict(
-        #         round=[self.current_round],
-        #         turn=[self.current_turn],
-        #         opponent=[copy(self.agent_opponent)],
-        #         scores=[copy(np.round(self.scores, 3))],
-        #     )
-        # ).copy(deep=True)
 
         return env_state
 
