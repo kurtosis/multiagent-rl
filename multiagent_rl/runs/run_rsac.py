@@ -17,7 +17,6 @@ for i in range(n_runs):
         start_steps=3000,
         update_after=49,
         update_every=50,
-        save_freq=10,
         num_test_episodes=100,
         max_episode_len=10,
         env_fn=ConstantDualUltimatum,
