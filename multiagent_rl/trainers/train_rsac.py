@@ -15,32 +15,62 @@ def count_vars(module):
 
 def train_rsac(
     env_fn,
+    env_kwargs=dict(),
     agent_fn=RSACAgent,
+    agent_kwargs=dict(),
     seed=0,
     steps_per_epoch=4000,
     epochs=100,
-    max_buffer_len=100000,
-    gamma=0.99,
-    polyak=0.995,
+    max_episode_len=10,
+    max_episodes=100000,
     pi_lr=1e-3,
     q_lr=1e-3,
     a_lr=1e-3,
+    gamma=0.99,
+    polyak=0.995,
+    alpha=0.05,
+    update_alpha_after=5000,
+    target_entropy=-4.0,
     batch_size=100,
     start_steps=10000,
     update_after=1000,
     update_every=50,
     num_test_episodes=10,
-    log_interval=10,
-    max_episode_len=10,
-    agent_kwargs=dict(),
-    env_kwargs=dict(),
     logger_kwargs=dict(),
-    save_freq=1,
-    alpha=0.05,
-    update_alpha_after=5000,
-    target_entropy=-4.0,
 ):
-    """Training loop for Recurrent-SAC, single-agent RL."""
+    """
+    Training loop for a single-agent environment, using episode-based training suitable for RSACAgent (SACAgent can also
+    be trained with this loop).
+
+    Args:
+        env_fn: a function which creates a copy of the environment. Must satisfy the OpenAI Gym API.
+        env_kwargs: keyword args for the environment constructor.
+        agent_fn: constructor methods for the agent.
+        agent_kwargs: dict of keyword args for the agent constructor.
+        seed: seed for random number generators.
+        steps_per_epoch: number of interactions between the agent and environment in each epoch.
+        epochs: total number of epochs to train agents over.
+        max_episode_len : max episode length, used in buffer size
+        max_episodes : max number of episodes buffer can hold
+        pi_lr : learning rate for pi updates
+        q_lr : learning rate for Q updates
+        a_lr : learning rate for alpha updates
+        gamma : discount factor (between 0 and 1) for Q updates
+        polyak : interpolation factor for Q target updates (between 0 and 1, typically close to 1)
+        alpha : entropy regularization coefficient (larger values penalize low-entropy pi)
+        update_alpha_after : number of env interactions to run before updating alpha
+        target_entropy : controls the min value that alpha is reduced to during training.
+            (typically negative, lower values cause alpha to be reduced more)
+        batch_size: number of episodes per minibatch in optimization/SGD.
+        start_steps: number of steps to perform (uniform) random actions before using agent policies.
+            Intended for exploration.
+        update_after: number of interaction updates to store to buffers before starting agent updates. Ensures there
+            is enough data in buffers for updates to be useful.
+        update_every: number of interactions to run between agent updates. Note: regardless of this value, the
+            ratio of interactions to updates is set to 1.
+        num_test_episodes: number of episodes to test deterministic agent policies at the end of each epoch.
+        logger_kwargs: keyword args for the logger.
+    """
 
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
@@ -78,7 +108,7 @@ def train_rsac(
         f"\nNumber of parameters \t policy: {var_counts[0]} q1/2: {var_counts[1]}\n"
     )
 
-    buf = EpisodeBuffer(obs_dim, act_dim, max_episode_len, max_buffer_len)
+    buf = EpisodeBuffer(obs_dim, act_dim, max_episode_len, max_episodes)
 
     pi_optimizer = Adam(agent.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(q_params, lr=q_lr)

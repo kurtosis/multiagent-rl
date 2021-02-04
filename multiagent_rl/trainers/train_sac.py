@@ -12,35 +12,64 @@ from multiagent_rl.utils.evaluation_utils import *
 
 def train_sac(
     env_fn,
+    env_kwargs=dict(),
     agent_fn=SACAgent,
+    agent_kwargs=dict(),
     seed=0,
     steps_per_epoch=4000,
     epochs=100,
-    replay_size=1000000,
-    gamma=0.99,
-    polyak=0.995,
+    max_episode_len=1000,
+    max_buffer_size=1000000,
     pi_lr=1e-3,
     q_lr=1e-3,
     a_lr=1e-3,
-    target_noise=0.2,
-    target_noise_lim=0.5,
-    policy_delay=2,
+    gamma=0.99,
+    polyak=0.995,
+    alpha=0.05,
+    update_alpha_after=5000,
+    target_entropy=-4.0,
     batch_size=100,
     start_steps=10000,
     update_after=1000,
     update_every=50,
     num_test_episodes=10,
-    log_interval=10,
-    max_episode_len=1000,
-    agent_kwargs=dict(),
-    env_kwargs=dict(),
     logger_kwargs=dict(),
     save_freq=1,
-    alpha=0.05,
-    update_alpha_after=5000,
-    target_entropy=-4.0,
 ):
-    """Training loop for SAC, single-agent RL."""
+    """
+    Training loop for a single-agent environment, using transition-based training suitable for SACAgent,
+    but not RSACAgent.
+
+    Args:
+        env_fn: a function which creates a copy of the environment. Must satisfy the OpenAI Gym API.
+        env_kwargs: keyword args for the environment constructor.
+        agent_fn: constructor methods for the agent.
+        agent_kwargs: dict of keyword args for the agent constructor.
+        seed: seed for random number generators.
+        steps_per_epoch: number of interactions between the agent and environment in each epoch.
+        epochs: total number of epochs to train agents over.
+        max_episode_len: max episode length, used in buffer size
+        max_buffer_size: max number of transitions to store in buffer
+        pi_lr: learning rate for pi updates
+        q_lr: learning rate for Q updates
+        a_lr: learning rate for alpha updates
+        gamma: discount factor (between 0 and 1) for Q updates
+        polyak: interpolation factor for Q target updates (between 0 and 1, typically close to 1)
+        alpha: entropy regularization coefficient (larger values penalize low-entropy pi)
+        update_alpha_after : number of env interactions to run before updating alpha
+        target_entropy : controls the min value that alpha is reduced to during training.
+            (typically negative, lower values cause alpha to be reduced more)
+        batch_size: number of episodes per minibatch in optimization/SGD.
+        start_steps: number of steps to perform (uniform) random actions before using agent policies.
+            Intended for exploration.
+        update_after: number of interaction updates to store to buffers before starting agent updates. Ensures there
+            is enough data in buffers for updates to be useful.
+        update_every: number of interactions to run between agent updates. Note: regardless of this value, the
+            ratio of interactions to updates is set to 1.
+        num_test_episodes: number of episodes to test deterministic agent policies at the end of each epoch.
+        logger_kwargs: keyword args for the logger.
+        save_freq: how frequently (by number of epochs) to save current agent.
+    """
 
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
@@ -75,7 +104,7 @@ def train_sac(
         f"\nNumber of parameters \t policy: {var_counts[0]} q1/2: {var_counts[1]}\n"
     )
 
-    buf = TransitionBuffer(obs_dim, act_dim, replay_size)
+    buf = TransitionBuffer(obs_dim, act_dim, max_buffer_size)
 
     pi_optimizer = Adam(agent.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(q_params, lr=q_lr)

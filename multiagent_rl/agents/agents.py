@@ -258,6 +258,13 @@ class SACAgent(nn.Module):
 
     This class is designed only for single-agent RL. Unlike RSACAgent it has not (yet) been extended for
     multi-agent RL.
+
+    Args:
+        obs_space : the observation space, typically defined by the environment
+        action_space : the action space, typically defined by the environment
+        hidden_layers_pi : tuple of hidden layer sizes in the pi MLP
+        hidden_layers_q : tuple of hidden layer sizes in the Q MLP
+        activation : activation function used in Actor and Critic
     """
 
     def __init__(

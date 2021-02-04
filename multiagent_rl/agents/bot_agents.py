@@ -3,8 +3,8 @@ import numpy as np
 
 class AgentBot:
     """
-    Top level class for bot agents for use in Dual Ultimatum environment. The main purpose of this is to define
-    default no-op methods for methods that do not pertain to a particular type of agent.
+    Top level class for bot agents for use in Dual Ultimatum environment. The main purpose of this is to set
+    default no-op methods for methods that do not pertain to bots.
     """
 
     def act(self):
@@ -24,7 +24,6 @@ class ConstantBot(AgentBot):
     """
     Static bot that plays a constant action in Dual Ultimatum episode.
     fixed flag determines whether the action is reset at the start of a new episode.
-
     """
 
     def __init__(

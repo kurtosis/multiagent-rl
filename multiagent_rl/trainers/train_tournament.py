@@ -18,14 +18,13 @@ def train_tournament(
     seed=0,
     steps_per_epoch=4000,
     epochs=100,
+    max_episode_len=10,
     batch_size=100,
     start_steps=10000,
     update_after=1000,
     update_every=50,
     num_test_episodes=10,
-    max_ep_len=10,
     logger_kwargs=dict(),
-    save_freq=1,
 ):
     """
     Training loop for the multi-agent RoundRobinTournament environment. Note: many objects and functions are assumed
@@ -41,6 +40,7 @@ def train_tournament(
         seed: seed for random number generators.
         steps_per_epoch: number of interactions between the agents and environment in each epoch.
         epochs: total number of epochs to train agents over.
+        max_episode_len: max episode length. Note: This function assumes all episodes have a fixed length.
         batch_size: number of episodes per minibatch in optimization/SGD.
         start_steps: number of steps to perform (uniform) random actions before using agent policies.
             Intended for exploration.
@@ -49,9 +49,7 @@ def train_tournament(
         update_every: number of interactions to run between agent updates. Note: regardless of this value, the
             ratio of interactions to updates is set to 1.
         num_test_episodes: number of episodes to test deterministic agent policies at the end of each epoch.
-        max_ep_len: max episode length. Note: This function assumes all episodes have a fixed length.
         logger_kwargs: keyword args for the logger.
-        save_freq: how frequently (by number of epochs) to save current agents.
     """
 
     num_agents = len(agent_fns)
@@ -91,7 +89,7 @@ def train_tournament(
             episode_return = np.zeros(num_agents)
             episode_length = 0
             done = False
-            while not done and not episode_length == max_ep_len:
+            while not done and not episode_length == max_episode_len:
                 act = [
                     agent_list[i].act(
                         torch.as_tensor(obs[i], dtype=torch.float32), noise=True
